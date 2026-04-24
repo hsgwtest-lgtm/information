@@ -1,0 +1,36 @@
+{
+  "name": "ANA 特典航空券マイルシミュレーター",
+  "short_name": "ANAマイル計算",
+  "description": "ANA国際線特典航空券の必要マイル数を検索・比較できるシミュレーター",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#001F5B",
+  "theme_color": "#001F5B",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%23001F5B'/%3E%3Ctext y='140' x='30' font-size='120' font-family='Arial'%3E✈%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%23001F5B'/%3E%3Ctext y='380' x='60' font-size='320' font-family='Arial'%3E✈%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["travel", "utilities"],
+  "shortcuts": [
+    {
+      "name": "エコノミー検索",
+      "url": "./index.html?class=economy",
+      "description": "エコノミークラスで検索"
+    },
+    {
+      "name": "ビジネス検索",
+      "url": "./index.html?class=business",
+      "description": "ビジネスクラスで検索"
+    }
+  ]
+}

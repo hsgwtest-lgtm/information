@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#001F5B" />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ANAマイル" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- OGP -->
+  <meta property="og:title" content="ANA 特典航空券マイルシミュレーター" />
+  <meta property="og:description" content="目的地・シーズン・クラス別に必要マイル数を即検索" />
+  <meta property="og:type" content="website" />
+
+  <title>ANA マイルシミュレーター</title>
+  <link rel="manifest" href="manifest.json" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'ana-navy': '#001F5B',
+            'ana-blue': '#0E4C96',
+            'ana-sky': '#1E7BD4',
+            'ana-light': '#5BAEF0',
+            'ana-pale': '#EEF4FC',
+            'season-h': '#C0392B',
+            'season-r': '#27AE60',
+            'season-l': '#2980B9',
+          },
+          fontFamily: {
+            sans: ['Noto Sans JP', 'Inter', 'sans-serif'],
+            mono: ['Inter', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- React 18 -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      background: #001F5B;
+      min-height: 100dvh;
+      overscroll-behavior: none;
+    }
+    /* iOS safe area */
+    .safe-top { padding-top: env(safe-area-inset-top, 0px); }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(94,174,240,0.3); border-radius: 4px; }
+    /* Slider styling */
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: linear-gradient(to right, #1E7BD4 0%, #1E7BD4 var(--pct, 50%), rgba(255,255,255,0.15) var(--pct, 50%), rgba(255,255,255,0.15) 100%);
+      outline: none;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid #1E7BD4;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid #1E7BD4;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+    /* Card animation */
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card-enter { animation: fadeSlide 0.25s ease forwards; }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(30,123,212,0.4); }
+      50% { box-shadow: 0 0 0 6px rgba(30,123,212,0); }
+    }
+    .season-badge { animation: pulse-glow 2s ease-in-out infinite; }
+    /* Scrollable chip row */
+    .chips-scroll { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .chips-scroll::-webkit-scrollbar { display: none; }
+    /* Glassmorphism */
+    .glass {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .glass-card {
+      background: rgba(255,255,255,0.95);
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    /* Background mesh */
+    .bg-mesh {
+      background:
+        radial-gradient(ellipse at 0% 0%, rgba(30,123,212,0.3) 0%, transparent 60%),
+        radial-gradient(ellipse at 100% 100%, rgba(14,76,150,0.4) 0%, transparent 60%),
+        #001F5B;
+    }
+    /* Dotted pattern */
+    .bg-dots {
+      background-image: radial-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// DATA: ANA Zone Mile Chart
+// 日本発 国際線特典航空券 マイル数チャート（サンプルデータ）
+// ※実際の最新データはANA公式サイトでご確認ください
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const ZONES = [
+  {
+    id: 'zone1',
+    name: 'ゾーン1',
+    region: 'east_asia',
+    regionLabel: '東アジア（近距離）',
+    emoji: '🇰🇷',
+    color: '#E74C3C',
+    destinations: ['ソウル（ICN）', '釜山（PUS）', '大連（DLC）', '瀋陽（SHE）', 'ハルビン（HRB）'],
+    miles: {
+      economy:         { L: 12000, R: 15000, H: 18000 },
+      premium_economy: { L: 18000, R: 22000, H: 27000 },
+      business:        { L: 22000, R: 27000, H: 33000 },
+      first:           { L: 33000, R: 40000, H: 50000 },
+    }
+  },
+  {
+    id: 'zone2',
+    name: 'ゾーン2',
+    region: 'asia',
+    regionLabel: 'アジア',
+    emoji: '🌏',
+    color: '#8E44AD',
+    destinations: ['北京（PEK）', '上海（PVG）', '香港（HKG）', '台北（TPE）', 'バンコク（BKK）', 'シンガポール（SIN）', 'クアラルンプール（KUL）', 'マニラ（MNL）', 'ジャカルタ（CGK）', 'ホーチミン（SGN）', 'ハノイ（HAN）', 'バリ（DPS）', 'グアム（GUM）', 'サイパン（SPN）'],
+    miles: {
+      economy:         { L: 17000, R: 20000, H: 23000 },
+      premium_economy: { L: 25000, R: 30000, H: 36000 },
+      business:        { L: 33000, R: 40000, H: 47000 },
+      first:           { L: 50000, R: 60000, H: 70000 },
+    }
+  },
+  {
+    id: 'zone3',
+    name: 'ゾーン3',
+    region: 'hawaii',
+    regionLabel: 'ハワイ',
+    emoji: '🌺',
+    color: '#E67E22',
+    destinations: ['ホノルル（HNL）', 'コナ（KOA）', 'マウイ（OGG）'],
+    miles: {
+      economy:         { L: 22000, R: 27000, H: 35000 },
+      premium_economy: { L: 33000, R: 40000, H: 52000 },
+      business:        { L: 43000, R: 55000, H: 68000 },
+      first:           { L: 65000, R: 83000, H: 103000 },
+    }
+  },
+  {
+    id: 'zone4',
+    name: 'ゾーン4',
+    region: 'oceania',
+    regionLabel: 'オセアニア',
+    emoji: '🦘',
+    color: '#16A085',
+    destinations: ['シドニー（SYD）', 'メルボルン（MEL）', 'ブリスベン（BNE）', 'パース（PER）', 'オークランド（AKL）'],
+    miles: {
+      economy:         { L: 28000, R: 33000, H: 40000 },
+      premium_economy: { L: 42000, R: 50000, H: 60000 },
+      business:        { L: 55000, R: 65000, H: 80000 },
+      first:           { L: 83000, R: 98000, H: 120000 },
+    }
+  },
+  {
+    id: 'zone5',
+    name: 'ゾーン5',
+    region: 'north_america',
+    regionLabel: '北米',
+    emoji: '🗽',
+    color: '#2980B9',
+    destinations: ['ロサンゼルス（LAX）', 'サンフランシスコ（SFO）', 'ニューヨーク（JFK）', 'シカゴ（ORD）', 'ワシントンD.C.（IAD）', 'シアトル（SEA）', 'ヒューストン（IAH）', 'ボストン（BOS）', 'バンクーバー（YVR）'],
+    miles: {
+      economy:         { L: 35000, R: 45000, H: 55000 },
+      premium_economy: { L: 52000, R: 67000, H: 83000 },
+      business:        { L: 75000, R: 95000, H: 115000 },
+      first:           { L: 110000, R: 145000, H: 175000 },
+    }
+  },
+  {
+    id: 'zone6',
+    name: 'ゾーン6',
+    region: 'europe',
+    regionLabel: 'ヨーロッパ・中東',
+    emoji: '🗼',
+    color: '#1F618D',
+    destinations: ['ロンドン（LHR）', 'パリ（CDG）', 'フランクフルト（FRA）', 'ミュンヘン（MUC）', 'ウィーン（VIE）', 'チューリヒ（ZRH）', 'ブリュッセル（BRU）', 'アムステルダム（AMS）', 'ストックホルム（ARN）', 'ヘルシンキ（HEL）', 'コペンハーゲン（CPH）', 'イスタンブール（IST）', 'ドバイ（DXB）', 'デリー（DEL）', 'ムンバイ（BOM）'],
+    miles: {
+      economy:         { L: 45000, R: 55000, H: 65000 },
+      premium_economy: { L: 67000, R: 83000, H: 98000 },
+      business:        { L: 88000, R: 110000, H: 132000 },
+      first:           { L: 132000, R: 165000, H: 198000 },
+    }
+  },
+  {
+    id: 'zone7',
+    name: 'ゾーン7',
+    region: 'others',
+    regionLabel: 'アフリカ・南米',
+    emoji: '🌍',
+    color: '#117A65',
+    destinations: ['ヨハネスブルク（JNB）', 'カイロ（CAI）', 'ナイロビ（NBO）', 'サンパウロ（GRU）', 'メキシコシティ（MEX）'],
+    miles: {
+      economy:         { L: 55000, R: 65000, H: 75000 },
+      premium_economy: { L: 83000, R: 98000, H: 113000 },
+      business:        { L: 110000, R: 130000, H: 150000 },
+      first:           { L: 165000, R: 195000, H: 225000 },
+    }
+  },
+];
+
+const CLASSES = [
+  { id: 'economy',         label: 'エコノミー',  short: 'ECO',  color: '#3498DB' },
+  { id: 'premium_economy', label: 'プレエコ',    short: 'PEY',  color: '#9B59B6' },
+  { id: 'business',        label: 'ビジネス',   short: 'BIZ',  color: '#E67E22' },
+  { id: 'first',           label: 'ファースト', short: '1ST',  color: '#C0392B' },
+];
+
+const REGIONS = [
+  { id: 'all',           label: 'すべて' },
+  { id: 'east_asia',     label: '東アジア' },
+  { id: 'asia',          label: 'アジア' },
+  { id: 'hawaii',        label: 'ハワイ' },
+  { id: 'oceania',       label: 'オセアニア' },
+  { id: 'north_america', label: '北米' },
+  { id: 'europe',        label: 'ヨーロッパ' },
+  { id: 'others',        label: 'アフリカ・南米' },
+];
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// SEASON LOGIC (ANA approximate)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function detectSeason(date) {
+  const d = new Date(date);
+  const m = d.getMonth() + 1; // 1-12
+  const day = d.getDate();
+
+  // H (High / ハイシーズン)
+  // 冬休み: 12/20-1/8、GW: 4/25-5/6、夏: 7/22-8/31
+  if (m === 12 && day >= 20) return 'H';
+  if (m === 1 && day <= 8) return 'H';
+  if (m === 4 && day >= 25) return 'H';
+  if (m === 5 && day <= 6) return 'H';
+  if (m === 7 && day >= 22) return 'H';
+  if (m === 8) return 'H';
+
+  // L (Low / ローシーズン)
+  // 1/9-3/19、6/1-6/30、9/1-9/30、10/1-11/14
+  if (m === 1 && day >= 9) return 'L';
+  if (m === 2) return 'L';
+  if (m === 3 && day <= 19) return 'L';
+  if (m === 6) return 'L';
+  if (m === 9) return 'L';
+  if (m === 10 && day <= 14) return 'L';
+
+  // R (Regular / レギュラーシーズン) = rest
+  return 'R';
+}
+
+const SEASON_INFO = {
+  H: { label: 'ハイシーズン', short: 'H', color: '#C0392B', bg: '#FDF0EE', desc: '年末年始・GW・夏休み' },
+  R: { label: 'レギュラー',   short: 'R', color: '#27AE60', bg: '#EEF8EE', desc: '通常期間' },
+  L: { label: 'ローシーズン', short: 'L', color: '#2980B9', bg: '#EEF4FB', desc: 'お得な閑散期' },
+};
+
+const MAX_MILES = {
+  economy: 75000,
+  premium_economy: 113000,
+  business: 150000,
+  first: 225000,
+};
+
+const SLIDER_STEPS = {
+  economy: [12000, 17000, 22000, 28000, 35000, 45000, 55000, 75000],
+  premium_economy: [18000, 25000, 33000, 42000, 52000, 67000, 83000, 113000],
+  business: [22000, 33000, 43000, 55000, 75000, 88000, 110000, 150000],
+  first: [33000, 50000, 65000, 83000, 110000, 132000, 165000, 225000],
+};
+
+function formatMiles(n) {
+  return n.toLocaleString('ja-JP') + ' マイル';
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// COMPONENTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function Header() {
+  return (
+    <div className="safe-top bg-mesh bg-dots">
+      <div className="px-4 pt-4 pb-6">
+        <div className="flex items-center gap-3 mb-1">
+          <div style={{
+            width: 40, height: 40,
+            background: 'rgba(255,255,255,0.12)',
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 22,
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}>✈</div>
+          <div>
+            <div style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.15em',
+              color: 'rgba(255,255,255,0.5)',
+              textTransform: 'uppercase'
+            }}>ANA Mileage</div>
+            <div style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: '#fff',
+              lineHeight: 1.2,
+              letterSpacing: '-0.01em'
+            }}>特典航空券 マイルシミュレーター</div>
+          </div>
+        </div>
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 6 }}>
+          ※サンプルデータ使用 · ANA公式サイトで最新情報をご確認ください
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SeasonBadge({ season }) {
+  const s = SEASON_INFO[season];
+  return (
+    <span className="season-badge" style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 4,
+      background: s.color,
+      color: '#fff',
+      fontSize: 11,
+      fontWeight: 700,
+      padding: '2px 8px',
+      borderRadius: 20,
+      letterSpacing: '0.05em',
+    }}>
+      <span>{s.short}</span>
+      <span style={{ fontWeight: 400 }}>{s.label}</span>
+    </span>
+  );
+}
+
+function DateSeasonSelector({ date, onDateChange }) {
+  const season = detectSeason(date);
+  const s = SEASON_INFO[season];
+
+  return (
+    <div className="glass" style={{ borderRadius: 14, padding: '14px 16px' }}>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        旅行日を選択
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input
+          type="date"
+          value={date}
+          onChange={e => onDateChange(e.target.value)}
+          min="2025-01-01"
+          max="2026-12-31"
+          style={{
+            flex: 1,
+            background: 'rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 8,
+            color: '#fff',
+            fontSize: 15,
+            fontWeight: 600,
+            padding: '8px 12px',
+            outline: 'none',
+            colorScheme: 'dark',
+          }}
+        />
+        <div style={{
+          background: s.color + '22',
+          border: `1px solid ${s.color}55`,
+          borderRadius: 10,
+          padding: '6px 12px',
+          textAlign: 'center',
+          minWidth: 70,
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.short}</div>
+          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{s.label}</div>
+        </div>
+      </div>
+      <div style={{
+        marginTop: 8,
+        padding: '6px 10px',
+        background: s.color + '18',
+        borderRadius: 8,
+        fontSize: 11,
+        color: s.color,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+      }}>
+        <span>📅</span>
+        <span>{s.desc} — この時期は<b>{season === 'L' ? 'お得' : season === 'H' ? '最高値' : '通常料金'}</b>です</span>
+      </div>
+    </div>
+  );
+}
+
+function ClassSelector({ selected, onChange }) {
+  return (
+    <div className="glass" style={{ borderRadius: 14, padding: '14px 16px' }}>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 10, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        座席クラス
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {CLASSES.map(cls => (
+          <button
+            key={cls.id}
+            onClick={() => onChange(cls.id)}
+            style={{
+              background: selected === cls.id ? cls.color : 'rgba(255,255,255,0.07)',
+              border: selected === cls.id ? `2px solid ${cls.color}` : '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              padding: '8px 4px',
+              color: '#fff',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', opacity: selected === cls.id ? 1 : 0.6 }}>
+              {cls.short}
+            </div>
+            <div style={{ fontSize: 9, marginTop: 2, opacity: selected === cls.id ? 0.9 : 0.45, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {cls.label}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RegionFilter({ selected, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase', paddingLeft: 2 }}>
+        エリア絞り込み
+      </div>
+      <div className="chips-scroll" style={{ display: 'flex', gap: 8, paddingBottom: 4 }}>
+        {REGIONS.map(r => (
+          <button
+            key={r.id}
+            onClick={() => onChange(r.id)}
+            style={{
+              background: selected === r.id ? '#1E7BD4' : 'rgba(255,255,255,0.08)',
+              border: selected === r.id ? '1.5px solid #5BAEF0' : '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 20,
+              padding: '6px 14px',
+              color: '#fff',
+              fontSize: 12,
+              fontWeight: selected === r.id ? 600 : 400,
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              opacity: selected === r.id ? 1 : 0.7,
+            }}
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MilesSlider({ value, onChange, selectedClass }) {
+  const max = MAX_MILES[selectedClass];
+  const pct = (value / max * 100).toFixed(1);
+
+  const handleChange = (e) => {
+    const raw = parseInt(e.target.value);
+    const step = 1000;
+    onChange(Math.round(raw / step) * step);
+  };
+
+  return (
+    <div className="glass" style={{ borderRadius: 14, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+          上限マイル数
+        </div>
+        <div style={{
+          background: '#1E7BD4',
+          borderRadius: 8,
+          padding: '3px 10px',
+          fontSize: 14,
+          fontWeight: 700,
+          color: '#fff',
+          letterSpacing: '-0.02em',
+        }}>
+          {value.toLocaleString()}
+        </div>
+      </div>
+      <input
+        type="range"
+        min={1000}
+        max={max}
+        step={1000}
+        value={value}
+        onChange={handleChange}
+        style={{ '--pct': pct + '%' }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+        <span>1,000</span>
+        <span>{max.toLocaleString()}</span>
+      </div>
+      {/* Quick picks */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+        {SLIDER_STEPS[selectedClass].map(step => (
+          <button
+            key={step}
+            onClick={() => onChange(step)}
+            style={{
+              background: value === step ? 'rgba(30,123,212,0.4)' : 'rgba(255,255,255,0.07)',
+              border: value === step ? '1px solid #5BAEF0' : '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 6,
+              padding: '3px 8px',
+              color: value === step ? '#fff' : 'rgba(255,255,255,0.5)',
+              fontSize: 10,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            {(step / 1000).toFixed(0)}k
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ZoneCard({ zone, seatClass, season, idx }) {
+  const miles = zone.miles[seatClass][season];
+  const s = SEASON_INFO[season];
+  const cls = CLASSES.find(c => c.id === seatClass);
+  const [expanded, setExpanded] = React.useState(false);
+
+  return (
+    <div
+      className="card-enter glass-card"
+      style={{
+        borderRadius: 16,
+        overflow: 'hidden',
+        animationDelay: `${idx * 0.04}s`,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+      }}
+    >
+      {/* Card header */}
+      <div style={{
+        background: zone.color,
+        padding: '10px 14px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{zone.emoji}</span>
+          <div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 600, letterSpacing: '0.08em' }}>
+              {zone.name}
+            </div>
+            <div style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>
+              {zone.regionLabel}
+            </div>
+          </div>
+        </div>
+        <div style={{
+          background: 'rgba(0,0,0,0.2)',
+          borderRadius: 8,
+          padding: '3px 8px',
+          fontSize: 10,
+          color: 'rgba(255,255,255,0.8)',
+          fontWeight: 600,
+        }}>
+          {cls.short}
+        </div>
+      </div>
+
+      {/* Miles display */}
+      <div style={{ padding: '14px 16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 8 }}>
+          <span style={{
+            fontSize: 30,
+            fontWeight: 800,
+            color: '#001F5B',
+            letterSpacing: '-0.03em',
+            lineHeight: 1,
+          }}>
+            {miles.toLocaleString()}
+          </span>
+          <span style={{ fontSize: 13, color: '#6B7280', fontWeight: 500 }}>マイル</span>
+        </div>
+
+        {/* All seasons comparison */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 6,
+          marginBottom: 12,
+        }}>
+          {['L', 'R', 'H'].map(s2 => {
+            const m = zone.miles[seatClass][s2];
+            const si = SEASON_INFO[s2];
+            const isCurrent = s2 === season;
+            return (
+              <div key={s2} style={{
+                background: isCurrent ? si.color + '15' : '#F9FAFB',
+                border: isCurrent ? `1.5px solid ${si.color}40` : '1px solid #E5E7EB',
+                borderRadius: 8,
+                padding: '6px 8px',
+                textAlign: 'center',
+              }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: si.color, letterSpacing: '0.08em', marginBottom: 2 }}>
+                  {si.short} {isCurrent && '◀'}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#1F2937' }}>
+                  {(m / 1000).toFixed(0)}k
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Destinations */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          borderTop: '1px solid #F3F4F6',
+          padding: '8px 16px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          color: '#6B7280',
+          fontSize: 11,
+          fontWeight: 500,
+        }}
+      >
+        <span>{zone.destinations.length}都市 対応</span>
+        <span style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▾</span>
+      </button>
+
+      {expanded && (
+        <div style={{
+          padding: '0 16px 14px',
+          borderTop: '1px solid #F3F4F6',
+        }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+            {zone.destinations.map(dest => (
+              <span key={dest} style={{
+                background: zone.color + '12',
+                border: `1px solid ${zone.color}30`,
+                borderRadius: 6,
+                padding: '3px 8px',
+                fontSize: 10,
+                color: zone.color,
+                fontWeight: 500,
+              }}>
+                {dest}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResultsGrid({ results, seatClass, season }) {
+  if (results.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>✈️</div>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: 500 }}>
+          条件に合う目的地が見つかりません
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 6 }}>
+          上限マイル数を増やすか、エリアを変更してください
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '4px 2px 12px',
+      }}>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{results.length}</span> 件ヒット
+        </div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+          マイル数が少ない順
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {results.map((zone, idx) => (
+          <ZoneCard key={zone.id} zone={zone} seatClass={seatClass} season={season} idx={idx} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MAIN APP
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function App() {
+  const [date, setDate] = React.useState(todayISO);
+  const [seatClass, setSeatClass] = React.useState('economy');
+  const [region, setRegion] = React.useState('all');
+  const [maxMiles, setMaxMiles] = React.useState(45000);
+
+  const season = detectSeason(date);
+
+  // Sync maxMiles when class changes
+  const handleClassChange = (cls) => {
+    setSeatClass(cls);
+    setMaxMiles(MAX_MILES[cls]);
+  };
+
+  // Filter & sort
+  const results = React.useMemo(() => {
+    return ZONES
+      .filter(zone => {
+        if (region !== 'all' && zone.region !== region) return false;
+        const miles = zone.miles[seatClass][season];
+        return miles <= maxMiles;
+      })
+      .sort((a, b) => a.miles[seatClass][season] - b.miles[seatClass][season]);
+  }, [seatClass, region, maxMiles, season]);
+
+  return (
+    <div className="bg-mesh bg-dots" style={{ minHeight: '100dvh' }}>
+      <Header />
+
+      {/* Controls panel */}
+      <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <DateSeasonSelector date={date} onDateChange={setDate} />
+        <ClassSelector selected={seatClass} onChange={handleClassChange} />
+        <MilesSlider value={maxMiles} onChange={setMaxMiles} selectedClass={seatClass} />
+        <RegionFilter selected={region} onChange={setRegion} />
+      </div>
+
+      {/* Divider */}
+      <div style={{
+        height: 1,
+        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent)',
+        margin: '0 16px 16px',
+      }} />
+
+      {/* Results */}
+      <div style={{ padding: '0 16px' }} className="safe-bottom">
+        <ResultsGrid results={results} seatClass={seatClass} season={season} />
+        <div style={{ height: 32 }} />
+        <div style={{
+          textAlign: 'center',
+          fontSize: 10,
+          color: 'rgba(255,255,255,0.2)',
+          paddingBottom: 8,
+        }}>
+          データはサンプルです · ANA公式サイトで必ず最新情報をご確認ください
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+
+<script>
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// PWA: Service Worker Registration
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('[SW] Registered:', reg.scope))
+      .catch(err => console.warn('[SW] Registration failed:', err));
+  });
+}
+
+// iOS install hint (shows once)
+window.addEventListener('load', () => {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone;
+  const dismissed = localStorage.getItem('install-hint-dismissed');
+
+  if (isIOS && !isStandalone && !dismissed) {
+    setTimeout(() => {
+      const hint = document.createElement('div');
+      hint.innerHTML = `
+        <div id="install-hint" style="
+          position: fixed; bottom: 0; left: 0; right: 0;
+          background: rgba(0,31,91,0.97);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border-top: 1px solid rgba(255,255,255,0.1);
+          padding: 16px 20px 32px;
+          z-index: 9999;
+          display: flex; align-items: flex-start; gap: 12px;
+          font-family: 'Noto Sans JP', sans-serif;
+        ">
+          <span style="font-size: 28px; margin-top: 2px;">✈️</span>
+          <div style="flex: 1;">
+            <div style="color: #fff; font-weight: 700; font-size: 14px; margin-bottom: 4px;">
+              ホーム画面に追加できます
+            </div>
+            <div style="color: rgba(255,255,255,0.55); font-size: 12px; line-height: 1.5;">
+              Safari下部の <strong style="color:#5BAEF0">共有 ⬆</strong> ボタン →「<strong style="color:#5BAEF0">ホーム画面に追加</strong>」でアプリとして使えます
+            </div>
+          </div>
+          <button onclick="document.getElementById('install-hint').style.display='none'; localStorage.setItem('install-hint-dismissed','1')" style="
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: rgba(255,255,255,0.6);
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 4px;
+          ">×</button>
+        </div>
+      `;
+      document.body.appendChild(hint);
+    }, 3000);
+  }
+});
+</script>
+</body>
+</html>
