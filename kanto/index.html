@@ -63,18 +63,18 @@ html, body { width:100%; height:100%; background:var(--bg); overflow:hidden; fon
 }
 
 /* header */
-#hdr { position:absolute; top:14px; left:14px; padding:10px 16px; }
-.hdr-tag { font-size:.5rem; letter-spacing:.3em; color:var(--accent); text-transform:uppercase; }
-.hdr-name { font-size:.92rem; font-weight:600; letter-spacing:.08em; margin-top:2px; }
-.hdr-sub  { font-size:.58rem; color:var(--dim); margin-top:3px; font-family:var(--jp); }
+#hdr { position:absolute; top:14px; left:14px; padding:8px 12px; max-width:calc(50vw - 20px); overflow:hidden; }
+.hdr-tag { font-size:.44rem; letter-spacing:.22em; color:var(--accent); text-transform:uppercase; }
+.hdr-name { font-size:.72rem; font-weight:600; letter-spacing:.06em; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hdr-sub  { font-size:.50rem; color:var(--dim); margin-top:2px; font-family:var(--jp); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
 /* region selector */
-#rgns { position:absolute; top:14px; right:14px; padding:12px 14px; min-width:152px; }
-.p-lbl { font-size:.5rem; letter-spacing:.22em; color:var(--accent); text-transform:uppercase; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+#rgns { position:absolute; top:14px; right:14px; padding:9px 11px; min-width:130px; max-width:calc(50vw - 20px); }
+.p-lbl { font-size:.44rem; letter-spacing:.18em; color:var(--accent); text-transform:uppercase; margin-bottom:6px; padding-bottom:5px; border-bottom:1px solid var(--border); }
 .rbtn {
-  display:block; width:100%; padding:6px 10px; margin-bottom:4px;
+  display:block; width:100%; padding:5px 8px; margin-bottom:3px;
   background:transparent; border:1px solid rgba(221,213,187,.1); border-radius:3px;
-  color:var(--dim); font-family:var(--jp); font-size:.73rem;
+  color:var(--dim); font-family:var(--jp); font-size:.63rem;
   cursor:pointer; text-align:left;
   transition:all .18s;
 }
@@ -82,7 +82,7 @@ html, body { width:100%; height:100%; background:var(--bg); overflow:hidden; fon
 .rbtn.on    { border-color:var(--accent); color:var(--accent); background:var(--glow); }
 
 /* controls panel */
-#ctrl { position:absolute; bottom:14px; left:14px; padding:14px 16px; min-width:250px; }
+#ctrl { position:absolute; bottom:14px; left:14px; padding:10px 12px; min-width:190px; max-width:calc(50vw - 20px); }
 .cg { margin-bottom:13px; }
 .cg:last-of-type { margin-bottom:0; }
 .c-lbl {
@@ -117,12 +117,24 @@ input[type=range]::-moz-range-thumb {
 .tgl.on::after { left:17px; background:var(--accent); }
 
 /* stats panel */
-#stat { position:absolute; bottom:14px; right:14px; padding:12px 16px; min-width:165px; }
-.sr { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+#stat { position:absolute; bottom:14px; right:14px; padding:10px 12px; min-width:145px; max-width:calc(50vw - 20px); }
+.sr { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px; }
 .sr:last-child { margin-bottom:0; }
-.sl { font-size:.55rem; color:var(--dim); font-family:var(--jp); }
-.sv { font-size:.76rem; font-weight:600; }
+.sl { font-size:.50rem; color:var(--dim); font-family:var(--jp); }
+.sv { font-size:.68rem; font-weight:600; }
 .sv.ac { color:var(--accent); }
+
+/* city label overlay */
+.city-label {
+  position:fixed; pointer-events:none; z-index:15;
+  transform:translate(-50%,-100%);
+  padding:3px 8px;
+  background:rgba(10,22,36,.88);
+  border:1px solid var(--accent);
+  border-radius:3px;
+  font-family:var(--jp); font-size:.62rem; color:var(--accent);
+  letter-spacing:.08em; white-space:nowrap;
+}
 
 /* bottom info */
 #bottom {
@@ -231,12 +243,15 @@ const CFG = {
   VE_MAX: 1000,
 };
 
+// wx/wz are world-space coordinates (range ±100).
+// For the procedural-terrain fallback the flat basin is always centred near (4, 10);
+// those same values are used here so the pin lands on the city plain for all regions.
 const REGIONS = {
-  kanto:  { name:'関東平野 / Kanto Plain',       label:'関東平野 · 東京',  zoom:8, ox:224, oy:97,  grid:4, cam:{th:-.4,  ph:1.0, r:280} },
-  nobi:   { name:'濃尾平野 / Nōbi Plain',        label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, grid:4, cam:{th:-.3,  ph:0.95,r:260} },
-  osaka:  { name:'大阪平野 / Osaka Plain',       label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, grid:4, cam:{th:-.5,  ph:0.95,r:250} },
-  sendai: { name:'仙台平野 / Sendai Plain',      label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  grid:4, cam:{th:-.35, ph:1.0, r:270} },
-  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島 · 全国', zoom:6, ox:54,  oy:23,  grid:4, cam:{th:-.15, ph:0.80,r:480} },
+  kanto:  { name:'関東平野 / Kanto Plain',       label:'関東平野 · 東京',  zoom:8, ox:224, oy:97,  grid:4, cities:[{name:'東京',   wx: 4, wz:10}], cam:{th:-.4,  ph:1.0, r:280} },
+  nobi:   { name:'濃尾平野 / Nōbi Plain',        label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, grid:4, cities:[{name:'名古屋', wx: 4, wz:10}], cam:{th:-.3,  ph:0.95,r:260} },
+  osaka:  { name:'大阪平野 / Osaka Plain',       label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, grid:4, cities:[{name:'大阪',   wx: 4, wz:10}], cam:{th:-.5,  ph:0.95,r:250} },
+  sendai: { name:'仙台平野 / Sendai Plain',      label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  grid:4, cities:[{name:'仙台',   wx: 4, wz:10}], cam:{th:-.35, ph:1.0, r:270} },
+  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島 · 全国', zoom:6, ox:54,  oy:23,  grid:4, cities:[{name:'東京',wx:42,wz:7},{name:'大阪',wx:5,wz:27},{name:'名古屋',wx:17,wz:20},{name:'仙台',wx:52,wz:-9}], cam:{th:-.15, ph:0.80,r:480} },
 };
 
 // ============================================================
@@ -374,7 +389,7 @@ let elevData = null;
 // ============================================================
 // CUSTOM ORBIT CONTROLS
 // ============================================================
-const orb = { th:-.4, ph:1.0, r:280, tgt:new THREE.Vector3(), drag:false, lx:0, ly:0, ld:0 };
+const orb = { th:-.4, ph:1.0, r:280, tgt:new THREE.Vector3(), drag:false, lx:0, ly:0, ld:0, pmx:0, pmy:0 };
 const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
 
 function camUpdate() {
@@ -404,7 +419,7 @@ canvas.addEventListener('wheel', e => {
 }, {passive:false});
 canvas.addEventListener('touchstart', e => {
   if (e.touches.length===1) { orb.drag=true; orb.lx=e.touches[0].clientX; orb.ly=e.touches[0].clientY; }
-  else { orb.drag=false; orb.ld=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
+  else { orb.drag=false; orb.ld=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); orb.pmx=(e.touches[0].clientX+e.touches[1].clientX)/2; orb.pmy=(e.touches[0].clientY+e.touches[1].clientY)/2; }
 }, {passive:true});
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
@@ -416,7 +431,18 @@ canvas.addEventListener('touchmove', e => {
   } else if (e.touches.length===2) {
     const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
     orb.r = clamp(orb.r*(orb.ld/d), 30, 700);
-    orb.ld=d; camUpdate();
+    orb.ld=d;
+    const mx=(e.touches[0].clientX+e.touches[1].clientX)/2;
+    const my=(e.touches[0].clientY+e.touches[1].clientY)/2;
+    const dmx=mx-orb.pmx, dmy=my-orb.pmy;
+    orb.pmx=mx; orb.pmy=my;
+    const panScale=orb.r*0.004;
+    const ct=Math.cos(orb.th), st=Math.sin(orb.th), cp=Math.cos(orb.ph);
+    orb.tgt.x+=( dmx*ct + dmy*st*cp)*panScale;
+    orb.tgt.z+=(-dmx*st + dmy*ct*cp)*panScale;
+    orb.tgt.x=clamp(orb.tgt.x,-120,120);
+    orb.tgt.z=clamp(orb.tgt.z,-120,120);
+    camUpdate();
   }
 }, {passive:false});
 canvas.addEventListener('touchend', ()=>{ orb.drag=false; });
@@ -610,8 +636,79 @@ function statsOf(arr) {
 }
 
 // ============================================================
-// LOAD REGION
+// CITY MARKERS
 // ============================================================
+const PIN_H = 10;
+// Shared materials — not disposed per region switch, reused across all markers
+const pinMat = new THREE.MeshBasicMaterial({ color: 0xff5533 });
+const lineMat = new THREE.LineBasicMaterial({ color: 0xff5533 });
+let cityMarkers = [];
+
+function clearCityMarkers() {
+  for (const m of cityMarkers) {
+    scene.remove(m.group);
+    m.group.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+    });
+    m.labelEl.remove();
+  }
+  cityMarkers = [];
+}
+
+function createCityMarkers(key, arr, sz) {
+  clearCityMarkers();
+  const cities = (REGIONS[key] && REGIONS[key].cities) || [];
+  for (const city of cities) {
+    const col = Math.round((city.wx / CFG.MSIZE + 0.5) * (sz - 1));
+    const row = Math.round((city.wz / CFG.MSIZE + 0.5) * (sz - 1));
+    const clampedCol = Math.max(0, Math.min(sz-1, col));
+    const clampedRow = Math.max(0, Math.min(sz-1, row));
+    const elev = arr[clampedRow * sz + clampedCol];
+
+    // Shaft (vertical line)
+    const shaftGeo = new THREE.BufferGeometry();
+    shaftGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0,0,0, 0,PIN_H,0]), 3));
+    const shaft = new THREE.Line(shaftGeo, lineMat);
+
+    // Ball on top
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 8), pinMat);
+    ball.position.y = PIN_H;
+
+    const group = new THREE.Group();
+    group.add(shaft, ball);
+    group.position.set(city.wx, 0, city.wz);
+    scene.add(group);
+
+    // HTML label
+    const labelEl = document.createElement('div');
+    labelEl.className = 'city-label';
+    labelEl.textContent = city.name;
+    document.getElementById('ui').appendChild(labelEl);
+
+    cityMarkers.push({ group, labelEl, wx: city.wx, wz: city.wz, elev });
+  }
+}
+
+const _v3 = new THREE.Vector3();
+function updateCityMarkers() {
+  for (const m of cityMarkers) {
+    const vy = m.elev * uniforms.uVE.value * CFG.ESCALE;
+    m.group.position.y = vy;
+    _v3.set(m.wx, vy + PIN_H + 1.5, m.wz);
+    _v3.project(camera);
+    if (_v3.z > 1) {
+      m.labelEl.style.display = 'none';
+    } else {
+      const sx = (_v3.x + 1) / 2 * window.innerWidth;
+      const sy = (-_v3.y + 1) / 2 * window.innerHeight;
+      m.labelEl.style.display = 'block';
+      m.labelEl.style.left = sx + 'px';
+      m.labelEl.style.top  = sy + 'px';
+    }
+  }
+}
+
+
 let currentKey='kanto';
 
 async function loadRegion(key) {
@@ -623,8 +720,15 @@ async function loadRegion(key) {
   document.getElementById('ld-msg').textContent='標高データを読み込み中...';
   document.getElementById('rgn-lbl').textContent=reg.name;
 
-  // Move camera
-  Object.assign(orb, reg.cam); camUpdate();
+  // Move camera — center on main city
+  Object.assign(orb, reg.cam);
+  if (reg.cities && reg.cities.length > 0) {
+    const c = reg.cities[0];
+    orb.tgt.set(c.wx, 0, c.wz);
+  } else {
+    orb.tgt.set(0, 0, 0);
+  }
+  camUpdate();
 
   let arr, sz;
   try {
@@ -646,6 +750,8 @@ async function loadRegion(key) {
   if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); }
   mesh=new THREE.Mesh(buildMesh(arr,sz),mat);
   scene.add(mesh);
+
+  createCityMarkers(key, arr, sz);
 
   const s=statsOf(arr);
   document.getElementById('s-max').textContent=s.mx+' m';
@@ -717,6 +823,7 @@ window.addEventListener('resize',()=>{
 (function loop(){
   requestAnimationFrame(loop);
   ocean.position.y=Math.sin(Date.now()*.0004)*.25-.6;
+  updateCityMarkers();
   renderer.render(scene,camera);
 })();
 
