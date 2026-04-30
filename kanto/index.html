@@ -126,14 +126,14 @@ input[type=range]::-moz-range-thumb {
 
 /* bottom info */
 #bottom {
-  position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+  position:absolute; bottom:210px; left:50%; transform:translateX(-50%);
   font-size:.55rem; color:var(--dim); letter-spacing:.1em; pointer-events:none;
   white-space:nowrap;
 }
 
 /* compass rose */
 #compass {
-  position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  position:absolute; top:88px; left:50%; transform:translateX(-50%);
   pointer-events:none; opacity:.45;
   font-size:.5rem; letter-spacing:.2em; color:var(--dim);
 }
@@ -168,6 +168,7 @@ input[type=range]::-moz-range-thumb {
     <button class="rbtn" data-r="nobi">濃尾平野 · 名古屋</button>
     <button class="rbtn" data-r="osaka">大阪平野 · 大阪</button>
     <button class="rbtn" data-r="sendai">仙台平野 · 宮城</button>
+    <button class="rbtn" data-r="japan">日本列島 · 全国</button>
   </div>
 
   <!-- Controls -->
@@ -231,10 +232,11 @@ const CFG = {
 };
 
 const REGIONS = {
-  kanto:  { name:'関東平野 / Kanto Plain',   label:'関東平野 · 東京',  zoom:8, ox:224, oy:97,  cam:{th:-.4,  ph:1.0, r:280} },
-  nobi:   { name:'濃尾平野 / Nōbi Plain',    label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, cam:{th:-.3,  ph:0.95,r:260} },
-  osaka:  { name:'大阪平野 / Osaka Plain',   label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, cam:{th:-.5,  ph:0.95,r:250} },
-  sendai: { name:'仙台平野 / Sendai Plain',  label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  cam:{th:-.35, ph:1.0, r:270} },
+  kanto:  { name:'関東平野 / Kanto Plain',       label:'関東平野 · 東京',  zoom:8, ox:224, oy:97,  grid:4, cam:{th:-.4,  ph:1.0, r:280} },
+  nobi:   { name:'濃尾平野 / Nōbi Plain',        label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, grid:4, cam:{th:-.3,  ph:0.95,r:260} },
+  osaka:  { name:'大阪平野 / Osaka Plain',       label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, grid:4, cam:{th:-.5,  ph:0.95,r:250} },
+  sendai: { name:'仙台平野 / Sendai Plain',      label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  grid:4, cam:{th:-.35, ph:1.0, r:270} },
+  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島',         zoom:6, ox:54,  oy:23,  grid:4, cam:{th:-.15, ph:0.80,r:480} },
 };
 
 // ============================================================
@@ -265,7 +267,7 @@ ocean.position.y = -0.6;
 scene.add(ocean);
 
 // Subtle grid
-const grid = new THREE.GridHelper(220, 22, 0x1a2d3e, 0x1a2d3e);
+const grid = new THREE.GridHelper(220, 22, 0x2a4a66, 0x1e3a54);
 grid.position.y = -0.65;
 scene.add(grid);
 
@@ -351,11 +353,7 @@ void main() {
       col = mix(col, vec3(.02,.02,.05), .78);
   }
 
-  // Border fade (avoids hard mesh edge)
-  float e = min(min(vUv.x, 1.-vUv.x), min(vUv.y, 1.-vUv.y));
-  float alpha = smoothstep(0., .04, e);
-
-  gl_FragColor = vec4(col, alpha);
+  gl_FragColor = vec4(col, 1.0);
 }`;
 
 const uniforms = {
@@ -367,7 +365,7 @@ const uniforms = {
 
 const mat = new THREE.ShaderMaterial({
   vertexShader: VS, fragmentShader: FS,
-  uniforms, transparent: true, side: THREE.FrontSide
+  uniforms, transparent: false, side: THREE.DoubleSide, depthWrite: true
 });
 
 let mesh = null;
@@ -395,7 +393,7 @@ window.addEventListener('mouseup',   () => { orb.drag=false; });
 window.addEventListener('mousemove', e => {
   if (!orb.drag) return;
   orb.th -= (e.clientX-orb.lx)*.006;
-  orb.ph  = clamp(orb.ph + (e.clientY-orb.ly)*.006, .08, Math.PI/2-.05);
+  orb.ph  = clamp(orb.ph - (e.clientY-orb.ly)*.006, .08, Math.PI/2-.05);
   orb.lx=e.clientX; orb.ly=e.clientY;
   camUpdate();
 });
@@ -412,7 +410,7 @@ canvas.addEventListener('touchmove', e => {
   e.preventDefault();
   if (e.touches.length===1 && orb.drag) {
     orb.th -= (e.touches[0].clientX-orb.lx)*.008;
-    orb.ph  = clamp(orb.ph + (e.touches[0].clientY-orb.ly)*.008, .08, Math.PI/2-.05);
+    orb.ph  = clamp(orb.ph - (e.touches[0].clientY-orb.ly)*.008, .08, Math.PI/2-.05);
     orb.lx=e.touches[0].clientX; orb.ly=e.touches[0].clientY;
     camUpdate();
   } else if (e.touches.length===2) {
@@ -449,6 +447,7 @@ function proceduralTerrain(size, key) {
     nobi:   {fw:.50,mh:2200,bx:.1,by:.20,seed:2.1},
     osaka:  {fw:.44,mh:1900,bx:.08,by:.10,seed:0.8},
     sendai: {fw:.60,mh:1600,bx:.12,by:.22,seed:1.7},
+    japan:  {fw:.40,mh:3000,bx:.06,by:.10,seed:2.5},
   }[key]||{fw:.5,mh:2000,bx:.1,by:.15,seed:1.0};
 
   const arr = new Float32Array(size*size);
@@ -516,7 +515,8 @@ function tileToSamples(imgData, s) {
 
 async function loadRegionElev(reg) {
   const {zoom:z, ox, oy} = reg;
-  const {GRID:n, SMPL:s} = CFG;
+  const n = reg.grid || CFG.GRID;
+  const {SMPL:s} = CFG;
   const total=n*n, sz=n*s;
   const arr=new Float32Array(sz*sz);
   let done=0;
