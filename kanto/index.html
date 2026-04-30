@@ -243,15 +243,14 @@ const CFG = {
   VE_MAX: 1000,
 };
 
-// wx/wz are world-space coordinates (range ±100).
-// For the procedural-terrain fallback the flat basin is always centred near (4, 10);
-// those same values are used here so the pin lands on the city plain for all regions.
+// wx/wz are world-space coordinates (range ±100), computed from each city's
+// Web Mercator tile position within the region's tile grid (ox, oy, grid=4, zoom).
 const REGIONS = {
-  kanto:  { name:'関東平野 / Kanto Plain',       label:'関東平野 · 東京',  zoom:8, ox:224, oy:97,  grid:4, cities:[{name:'東京',   wx: 4, wz:10}], cam:{th:-.4,  ph:1.0, r:280} },
-  nobi:   { name:'濃尾平野 / Nōbi Plain',        label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, grid:4, cities:[{name:'名古屋', wx: 4, wz:10}], cam:{th:-.3,  ph:0.95,r:260} },
-  osaka:  { name:'大阪平野 / Osaka Plain',       label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, grid:4, cities:[{name:'大阪',   wx: 4, wz:10}], cam:{th:-.5,  ph:0.95,r:250} },
-  sendai: { name:'仙台平野 / Sendai Plain',      label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  grid:4, cities:[{name:'仙台',   wx: 4, wz:10}], cam:{th:-.35, ph:1.0, r:270} },
-  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島 · 全国', zoom:6, ox:54,  oy:23,  grid:4, cities:[{name:'東京',wx:42,wz:7},{name:'大阪',wx:5,wz:27},{name:'名古屋',wx:17,wz:20},{name:'仙台',wx:52,wz:-9}], cam:{th:-.15, ph:0.80,r:480} },
+  kanto:  { name:'関東平野 / Kanto Plain',       label:'関東平野 · 東京',  zoom:8, ox:225, oy:99,  grid:4, cities:[{name:'東京',   wx:17,  wz:-10}], cam:{th:-.4,  ph:1.0, r:280} },
+  nobi:   { name:'濃尾平野 / Nōbi Plain',        label:'濃尾平野 · 名古屋', zoom:8, ox:223, oy:99,  grid:4, cities:[{name:'名古屋', wx:18,  wz: 12}], cam:{th:-.3,  ph:0.95,r:260} },
+  osaka:  { name:'大阪平野 / Osaka Plain',       label:'大阪平野 · 大阪',  zoom:8, ox:222, oy:100, grid:4, cities:[{name:'大阪',   wx:18,  wz:-17}], cam:{th:-.5,  ph:0.95,r:250} },
+  sendai: { name:'仙台平野 / Sendai Plain',      label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:97,  grid:4, cities:[{name:'仙台',   wx: 9,  wz:-25}], cam:{th:-.35, ph:1.0, r:270} },
+  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島 · 全国', zoom:6, ox:54,  oy:23,  grid:4, cities:[{name:'東京',wx:42,wz:10},{name:'大阪',wx:4,wz:21},{name:'名古屋',wx:17,wz:16},{name:'仙台',wx:52,wz:-19}], cam:{th:-.15, ph:0.80,r:480} },
 };
 
 // ============================================================
@@ -438,8 +437,8 @@ canvas.addEventListener('touchmove', e => {
     orb.pmx=mx; orb.pmy=my;
     const panScale=orb.r*0.004;
     const ct=Math.cos(orb.th), st=Math.sin(orb.th), cp=Math.cos(orb.ph);
-    orb.tgt.x+=( dmx*ct + dmy*st*cp)*panScale;
-    orb.tgt.z+=(-dmx*st + dmy*ct*cp)*panScale;
+    orb.tgt.x-=( dmx*ct + dmy*st*cp)*panScale;
+    orb.tgt.z-=(-dmx*st + dmy*ct*cp)*panScale;
     orb.tgt.x=clamp(orb.tgt.x,-120,120);
     orb.tgt.z=clamp(orb.tgt.z,-120,120);
     camUpdate();
