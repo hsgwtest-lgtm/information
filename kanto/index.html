@@ -168,7 +168,7 @@ input[type=range]::-moz-range-thumb {
     <button class="rbtn" data-r="nobi">濃尾平野 · 名古屋</button>
     <button class="rbtn" data-r="osaka">大阪平野 · 大阪</button>
     <button class="rbtn" data-r="sendai">仙台平野 · 宮城</button>
-    <button class="rbtn" data-r="japan">日本列島 · 全国</button>
+    <button class="rbtn" data-r="japan" aria-label="日本列島 - 全国表示">日本列島 · 全国</button>
   </div>
 
   <!-- Controls -->
@@ -236,7 +236,7 @@ const REGIONS = {
   nobi:   { name:'濃尾平野 / Nōbi Plain',        label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, grid:4, cam:{th:-.3,  ph:0.95,r:260} },
   osaka:  { name:'大阪平野 / Osaka Plain',       label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, grid:4, cam:{th:-.5,  ph:0.95,r:250} },
   sendai: { name:'仙台平野 / Sendai Plain',      label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  grid:4, cam:{th:-.35, ph:1.0, r:270} },
-  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島',         zoom:6, ox:54,  oy:23,  grid:4, cam:{th:-.15, ph:0.80,r:480} },
+  japan:  { name:'日本列島 / Japan Archipelago', label:'日本列島 · 全国', zoom:6, ox:54,  oy:23,  grid:4, cam:{th:-.15, ph:0.80,r:480} },
 };
 
 // ============================================================
