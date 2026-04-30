@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Kanto Flatness Visualizer</title>
+<meta name="theme-color" content="#0c1a28">
+<meta name="description" content="関東平野などの地形の平らさを3Dで可視化 — 国土地理院DEM">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<style>
+/* ── RESET & ROOT ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:        #0c1a28;
+  --panel:     rgba(10, 22, 36, 0.88);
+  --border:    rgba(210, 155, 18, 0.32);
+  --text:      #ddd5bb;
+  --dim:       #6a7f8e;
+  --accent:    #d29b12;
+  --glow:      rgba(210, 155, 18, 0.12);
+  --water:     #1a3f70;
+  --mono:      'IBM Plex Mono', monospace;
+  --jp:        'Noto Sans JP', sans-serif;
+}
+html, body { width:100%; height:100%; background:var(--bg); overflow:hidden; font-family:var(--mono); color:var(--text); }
+#canvas { position:fixed; inset:0; display:block; width:100%; height:100%; cursor:crosshair; }
+#canvas:active { cursor:grabbing; }
+
+/* ── LOADING ── */
+#loading {
+  position:fixed; inset:0; z-index:200;
+  background:var(--bg);
+  display:flex; align-items:center; justify-content:center;
+  transition:opacity 0.7s;
+}
+#loading.hide { opacity:0; pointer-events:none; }
+.ld-box { text-align:center; }
+.ld-ring {
+  width:52px; height:52px; margin:0 auto 20px;
+  border:2px solid rgba(210,155,18,0.18);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin 1s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.ld-app { font-size:.55rem; letter-spacing:.35em; color:var(--accent); text-transform:uppercase; margin-bottom:6px; }
+#ld-msg { font-size:.75rem; color:var(--dim); margin-bottom:14px; }
+.ld-track { width:180px; height:2px; background:rgba(255,255,255,.08); border-radius:1px; margin:0 auto; overflow:hidden; }
+#ld-bar  { height:100%; background:var(--accent); width:0%; transition:width .25s; }
+
+/* ── UI OVERLAY ── */
+#ui { position:fixed; inset:0; pointer-events:none; z-index:10; }
+
+/* glass panel base */
+.panel {
+  background:var(--panel);
+  backdrop-filter:blur(14px) saturate(1.3);
+  -webkit-backdrop-filter:blur(14px) saturate(1.3);
+  border:1px solid var(--border);
+  border-radius:5px;
+  pointer-events:all;
+}
+
+/* header */
+#hdr { position:absolute; top:14px; left:14px; padding:10px 16px; }
+.hdr-tag { font-size:.5rem; letter-spacing:.3em; color:var(--accent); text-transform:uppercase; }
+.hdr-name { font-size:.92rem; font-weight:600; letter-spacing:.08em; margin-top:2px; }
+.hdr-sub  { font-size:.58rem; color:var(--dim); margin-top:3px; font-family:var(--jp); }
+
+/* region selector */
+#rgns { position:absolute; top:14px; right:14px; padding:12px 14px; min-width:152px; }
+.p-lbl { font-size:.5rem; letter-spacing:.22em; color:var(--accent); text-transform:uppercase; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+.rbtn {
+  display:block; width:100%; padding:6px 10px; margin-bottom:4px;
+  background:transparent; border:1px solid rgba(221,213,187,.1); border-radius:3px;
+  color:var(--dim); font-family:var(--jp); font-size:.73rem;
+  cursor:pointer; text-align:left;
+  transition:all .18s;
+}
+.rbtn:hover { border-color:var(--border); color:var(--text); background:var(--glow); }
+.rbtn.on    { border-color:var(--accent); color:var(--accent); background:var(--glow); }
+
+/* controls panel */
+#ctrl { position:absolute; bottom:14px; left:14px; padding:14px 16px; min-width:250px; }
+.cg { margin-bottom:13px; }
+.cg:last-of-type { margin-bottom:0; }
+.c-lbl {
+  font-size:.55rem; letter-spacing:.14em; color:var(--dim); text-transform:uppercase;
+  display:flex; justify-content:space-between; margin-bottom:6px;
+}
+.c-val { color:var(--accent); font-weight:600; }
+input[type=range] {
+  -webkit-appearance:none; width:100%; height:2px;
+  background:rgba(255,255,255,.1); outline:none; border-radius:1px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+  background:var(--accent); cursor:pointer;
+  box-shadow:0 0 8px rgba(210,155,18,.5);
+}
+input[type=range]::-moz-range-thumb {
+  width:14px; height:14px; border-radius:50%;
+  background:var(--accent); cursor:pointer; border:none;
+}
+.tgl-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:9px; }
+.tgl-row:last-child { margin-bottom:0; }
+.tgl {
+  width:32px; height:18px; background:rgba(255,255,255,.08); border-radius:9px;
+  position:relative; cursor:pointer; transition:background .2s; flex-shrink:0;
+}
+.tgl.on { background:rgba(210,155,18,.35); }
+.tgl::after {
+  content:''; position:absolute; top:3px; left:3px; width:12px; height:12px;
+  background:var(--dim); border-radius:50%; transition:all .2s;
+}
+.tgl.on::after { left:17px; background:var(--accent); }
+
+/* stats panel */
+#stat { position:absolute; bottom:14px; right:14px; padding:12px 16px; min-width:165px; }
+.sr { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+.sr:last-child { margin-bottom:0; }
+.sl { font-size:.55rem; color:var(--dim); font-family:var(--jp); }
+.sv { font-size:.76rem; font-weight:600; }
+.sv.ac { color:var(--accent); }
+
+/* bottom info */
+#bottom {
+  position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+  font-size:.55rem; color:var(--dim); letter-spacing:.1em; pointer-events:none;
+  white-space:nowrap;
+}
+
+/* compass rose */
+#compass {
+  position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  pointer-events:none; opacity:.45;
+  font-size:.5rem; letter-spacing:.2em; color:var(--dim);
+}
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+  <div class="ld-box">
+    <div class="ld-ring"></div>
+    <div class="ld-app">Kanto Flatness Visualizer</div>
+    <div id="ld-msg">起動中...</div>
+    <div class="ld-track"><div id="ld-bar"></div></div>
+  </div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <!-- Header -->
+  <div id="hdr" class="panel">
+    <div class="hdr-tag">Terrain Analysis · GSI DEM</div>
+    <div class="hdr-name">KFV — KANTO FLATNESS VISUALIZER</div>
+    <div class="hdr-sub">国土地理院 標高タイル / 垂直強調可視化</div>
+  </div>
+
+  <!-- Region presets -->
+  <div id="rgns" class="panel">
+    <div class="p-lbl">地域プリセット</div>
+    <button class="rbtn on" data-r="kanto">関東平野 · 東京</button>
+    <button class="rbtn" data-r="nobi">濃尾平野 · 名古屋</button>
+    <button class="rbtn" data-r="osaka">大阪平野 · 大阪</button>
+    <button class="rbtn" data-r="sendai">仙台平野 · 宮城</button>
+  </div>
+
+  <!-- Controls -->
+  <div id="ctrl" class="panel">
+    <div class="p-lbl">表示パラメータ</div>
+
+    <div class="cg">
+      <div class="c-lbl">垂直強調 <span class="c-val" id="ve-val">50×</span></div>
+      <input type="range" id="ve-sl" min="1" max="1000" step="1" value="50">
+    </div>
+
+    <div class="cg">
+      <div class="c-lbl">等高線間隔 <span class="c-val" id="ct-val">100 m</span></div>
+      <input type="range" id="ct-sl" min="10" max="1000" step="10" value="100">
+    </div>
+
+    <div class="tgl-row">
+      <span class="c-lbl" style="margin:0">等高線</span>
+      <div class="tgl on" id="tgl-ct"></div>
+    </div>
+    <div class="tgl-row">
+      <span class="c-lbl" style="margin:0">海面</span>
+      <div class="tgl on" id="tgl-oc"></div>
+    </div>
+    <div class="tgl-row">
+      <span class="c-lbl" style="margin:0">陰影起伏</span>
+      <div class="tgl on" id="tgl-sh"></div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div id="stat" class="panel">
+    <div class="p-lbl">地形統計</div>
+    <div class="sr"><span class="sl">最高標高</span><span class="sv" id="s-max">---</span></div>
+    <div class="sr"><span class="sl">最低標高</span><span class="sv" id="s-min">---</span></div>
+    <div class="sr"><span class="sl">平均標高</span><span class="sv" id="s-avg">---</span></div>
+    <div class="sr"><span class="sl">標準偏差 σ</span><span class="sv" id="s-std">---</span></div>
+    <div class="sr"><span class="sl">平坦度指標</span><span class="sv ac" id="s-flat">---</span></div>
+  </div>
+
+  <div id="bottom">
+    <span id="rgn-lbl">関東平野 / Kanto Plain</span>&ensp;·&ensp;GSI dem_png / demgm tile
+  </div>
+  <div id="compass">N ↑</div>
+</div>
+
+<script>
+'use strict';
+
+// ============================================================
+// CONFIG
+// ============================================================
+const CFG = {
+  GRID:   4,            // NxN tiles per region
+  SMPL:   40,           // samples per tile axis → total mesh: (4×40)2 = 1602
+  MSIZE:  200,          // world-space extent (±100 on XZ)
+  // y = elev × VE × ESCALE   (VE=50, Fuji=3776m → ~18 units from 200-unit mesh)
+  ESCALE: 1 / 10000,
+  VE_DEF: 50,
+  VE_MAX: 1000,
+};
+
+const REGIONS = {
+  kanto:  { name:'関東平野 / Kanto Plain',   label:'関東平野 · 東京',  zoom:8, ox:224, oy:97,  cam:{th:-.4,  ph:1.0, r:280} },
+  nobi:   { name:'濃尾平野 / Nōbi Plain',    label:'濃尾平野 · 名古屋', zoom:8, ox:221, oy:100, cam:{th:-.3,  ph:0.95,r:260} },
+  osaka:  { name:'大阪平野 / Osaka Plain',   label:'大阪平野 · 大阪',  zoom:8, ox:218, oy:103, cam:{th:-.5,  ph:0.95,r:250} },
+  sendai: { name:'仙台平野 / Sendai Plain',  label:'仙台平野 · 宮城',  zoom:8, ox:226, oy:92,  cam:{th:-.35, ph:1.0, r:270} },
+};
+
+// ============================================================
+// THREE.JS — SCENE / RENDERER / CAMERA
+// ============================================================
+const canvas   = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: window.devicePixelRatio < 2 });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x0c1a28);
+
+const scene  = new THREE.Scene();
+scene.fog    = new THREE.FogExp2(0x0c1a28, 0.0028);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 2000);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0x334466, 0.9));
+const sun = new THREE.DirectionalLight(0xfff5dd, 1.3);
+sun.position.set(1.4, 2.5, 1.0).normalize().multiplyScalar(200);
+scene.add(sun);
+
+// Ocean plane
+const ocean = new THREE.Mesh(
+  new THREE.PlaneGeometry(2000, 2000).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color:0x1a3a6a, roughness:.7, metalness:.1, transparent:true, opacity:.82 })
+);
+ocean.position.y = -0.6;
+scene.add(ocean);
+
+// Subtle grid
+const grid = new THREE.GridHelper(220, 22, 0x1a2d3e, 0x1a2d3e);
+grid.position.y = -0.65;
+scene.add(grid);
+
+// Stars
+const starsGeo = new THREE.BufferGeometry();
+const sPts = new Float32Array(600 * 3);
+for (let i = 0; i < 600; i++) {
+  sPts[i*3]   = (Math.random() - .5) * 2000;
+  sPts[i*3+1] = Math.random() * 600 + 80;
+  sPts[i*3+2] = (Math.random() - .5) * 2000;
+}
+starsGeo.setAttribute('position', new THREE.BufferAttribute(sPts, 3));
+scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color:0x6688aa, size:.6, transparent:true, opacity:.5 })));
+
+// ============================================================
+// SHADER MATERIAL
+// ============================================================
+const VS = `
+attribute float elevation;
+attribute vec2  slope;
+
+uniform float uVE;
+
+varying float vElev;
+varying vec3  vNorm;
+varying vec2  vUv;
+
+void main() {
+  vElev = elevation;
+  vUv   = uv;
+
+  // Reconstruct normal from slope scaled by current VE
+  // slope = (dElev/dx, dElev/dz) in world metres per world unit
+  float sx = slope.x * uVE;
+  float sz = slope.y * uVE;
+  vNorm = normalMatrix * normalize(vec3(-sx, 1.0, -sz));
+
+  vec3 p = position;
+  p.y = elevation * uVE * ${CFG.ESCALE.toFixed(8)};
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}`;
+
+const FS = `
+varying float vElev;
+varying vec3  vNorm;
+varying vec2  vUv;
+
+uniform float uContour;
+uniform float uShowCt;
+uniform float uShading;
+
+// Hypsometric tint — classic topographic palette
+vec3 hue(float e) {
+  if (e < 0.0)    return vec3(0.09, 0.22, 0.50);      // deep water
+  if (e < 5.0)    return mix(vec3(0.09,.22,.50), vec3(.63,.80,.55), (e+5.)/10.);
+  if (e < 50.0)   return mix(vec3(.63,.80,.55), vec3(.52,.69,.30), (e-5.)/45.);
+  if (e < 200.0)  return mix(vec3(.52,.69,.30), vec3(.72,.67,.28), (e-50.)/150.);
+  if (e < 600.0)  return mix(vec3(.72,.67,.28), vec3(.74,.47,.22), (e-200.)/400.);
+  if (e < 1500.0) return mix(vec3(.74,.47,.22), vec3(.50,.35,.28), (e-600.)/900.);
+  if (e < 2800.0) return mix(vec3(.50,.35,.28), vec3(.80,.78,.76), (e-1500.)/1300.);
+  return vec3(.94,.94,.97);
+}
+
+void main() {
+  vec3 col = hue(vElev);
+
+  // Hillshading
+  if (uShading > .5) {
+    vec3 ld = normalize(vec3(1.3, 2.5, 1.1));
+    float d = dot(normalize(vNorm), ld);
+    col *= (d * .38 + .62);
+  }
+
+  // Contour lines (minor every interval, major every 5×)
+  if (uShowCt > .5 && uContour > 0. && vElev > 0.) {
+    float m = mod(vElev, uContour);
+    float w = uContour * .03;
+    if (m < w || m > uContour - w)
+      col = mix(col, vec3(.05,.05,.08), .55);
+    float mj = mod(vElev, uContour * 5.);
+    float wj = uContour * .045;
+    if (mj < wj || mj > uContour*5. - wj)
+      col = mix(col, vec3(.02,.02,.05), .78);
+  }
+
+  // Border fade (avoids hard mesh edge)
+  float e = min(min(vUv.x, 1.-vUv.x), min(vUv.y, 1.-vUv.y));
+  float alpha = smoothstep(0., .04, e);
+
+  gl_FragColor = vec4(col, alpha);
+}`;
+
+const uniforms = {
+  uVE:      { value: CFG.VE_DEF },
+  uContour: { value: 100.0 },
+  uShowCt:  { value: 1.0 },
+  uShading: { value: 1.0 },
+};
+
+const mat = new THREE.ShaderMaterial({
+  vertexShader: VS, fragmentShader: FS,
+  uniforms, transparent: true, side: THREE.FrontSide
+});
+
+let mesh = null;
+let elevData = null;
+
+// ============================================================
+// CUSTOM ORBIT CONTROLS
+// ============================================================
+const orb = { th:-.4, ph:1.0, r:280, tgt:new THREE.Vector3(), drag:false, lx:0, ly:0, ld:0 };
+const clamp = (v,a,b) => Math.max(a,Math.min(b,v));
+
+function camUpdate() {
+  const {th,ph,r,tgt} = orb;
+  camera.position.set(
+    tgt.x + r * Math.sin(ph) * Math.sin(th),
+    tgt.y + r * Math.cos(ph),
+    tgt.z + r * Math.sin(ph) * Math.cos(th)
+  );
+  camera.lookAt(tgt);
+}
+camUpdate();
+
+canvas.addEventListener('mousedown', e => { orb.drag=true; orb.lx=e.clientX; orb.ly=e.clientY; });
+window.addEventListener('mouseup',   () => { orb.drag=false; });
+window.addEventListener('mousemove', e => {
+  if (!orb.drag) return;
+  orb.th -= (e.clientX-orb.lx)*.006;
+  orb.ph  = clamp(orb.ph + (e.clientY-orb.ly)*.006, .08, Math.PI/2-.05);
+  orb.lx=e.clientX; orb.ly=e.clientY;
+  camUpdate();
+});
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  orb.r = clamp(orb.r + e.deltaY*.28, 30, 700);
+  camUpdate();
+}, {passive:false});
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length===1) { orb.drag=true; orb.lx=e.touches[0].clientX; orb.ly=e.touches[0].clientY; }
+  else { orb.drag=false; orb.ld=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
+}, {passive:true});
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length===1 && orb.drag) {
+    orb.th -= (e.touches[0].clientX-orb.lx)*.008;
+    orb.ph  = clamp(orb.ph + (e.touches[0].clientY-orb.ly)*.008, .08, Math.PI/2-.05);
+    orb.lx=e.touches[0].clientX; orb.ly=e.touches[0].clientY;
+    camUpdate();
+  } else if (e.touches.length===2) {
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    orb.r = clamp(orb.r*(orb.ld/d), 30, 700);
+    orb.ld=d; camUpdate();
+  }
+}, {passive:false});
+canvas.addEventListener('touchend', ()=>{ orb.drag=false; });
+
+// ============================================================
+// NOISE (value noise + FBM for procedural fallback)
+// ============================================================
+function hash2(x,y) {
+  let n = (x*73856093)^(y*19349663);
+  n = ((n>>13)^n) * (n*n*15731+789221) + 1376312589;
+  return ((n>>16)&0x7fff)/0x7fff;
+}
+function vnoise(x,y) {
+  const ix=Math.floor(x), iy=Math.floor(y), fx=x-ix, fy=y-iy;
+  const ux=fx*fx*(3-2*fx), uy=fy*fy*(3-2*fy);
+  return hash2(ix,iy)*(1-ux)*(1-uy) + hash2(ix+1,iy)*ux*(1-uy)
+       + hash2(ix,iy+1)*(1-ux)*uy   + hash2(ix+1,iy+1)*ux*uy;
+}
+function fbm(x,y,oct=5) {
+  let v=0, a=.55, f=1, mx=0;
+  for(let i=0;i<oct;i++){ v+=vnoise(x*f,y*f)*a; mx+=a; a*=.52; f*=1.97; }
+  return v/mx;
+}
+
+function proceduralTerrain(size, key) {
+  const P = {
+    kanto:  {fw:.58,mh:2600,bx:.1,by:.15,seed:1.3},
+    nobi:   {fw:.50,mh:2200,bx:.1,by:.20,seed:2.1},
+    osaka:  {fw:.44,mh:1900,bx:.08,by:.10,seed:0.8},
+    sendai: {fw:.60,mh:1600,bx:.12,by:.22,seed:1.7},
+  }[key]||{fw:.5,mh:2000,bx:.1,by:.15,seed:1.0};
+
+  const arr = new Float32Array(size*size);
+  for (let r=0; r<size; r++) {
+    for (let c=0; c<size; c++) {
+      const u=c/size, v=r/size;
+      // Flat basin in center-right, mountains upper-left + right edge
+      const distC = Math.sqrt((u-.52)**2+(v-.55)**2);
+      const flatMask = Math.max(0, P.fw - distC*1.9);
+      const flat = flatMask*28 + fbm(u*8+P.seed,v*8)*10 - 3;
+
+      const mtnL = Math.max(0,(1-u*2.0-P.bx))**1.4 * P.mh;
+      const mtnT = Math.max(0,(1-v*2.4-P.by))**1.4 * P.mh*.65;
+      const mtnR = Math.max(0,(u*2.0-0.95))**1.4 * P.mh*.5;
+      const noise = (fbm(u*14+P.seed,v*12)-.5)*200;
+
+      arr[r*size+c] = Math.max(-8, flat + (mtnL+mtnT+mtnR)*(1-flatMask*1.5) + noise*(1-flatMask));
+    }
+  }
+  return arr;
+}
+
+// ============================================================
+// GSI TILE LOADING
+// ============================================================
+function gsiBuildUrl(z,x,y,layer='dem_png') {
+  return `https://cyberjapandata.gsi.go.jp/xyz/${layer}/${z}/${x}/${y}.png`;
+}
+
+function decodeGSI(r,g,b) {
+  const v=(r<<16)|(g<<8)|b;
+  if(v===8388608) return null;
+  return (v>8388608 ? v-16777216 : v) * 0.01;
+}
+
+function fetchTile(url) {
+  return new Promise(resolve=>{
+    const img = new Image();
+    img.crossOrigin='anonymous';
+    const t = setTimeout(()=>resolve(null), 9000);
+    img.onload = ()=>{
+      clearTimeout(t);
+      const cv=document.createElement('canvas');
+      cv.width=cv.height=256;
+      cv.getContext('2d').drawImage(img,0,0);
+      resolve(cv.getContext('2d').getImageData(0,0,256,256));
+    };
+    img.onerror=()=>{ clearTimeout(t); resolve(null); };
+    img.src=url;
+  });
+}
+
+function tileToSamples(imgData, s) {
+  const out = new Float32Array(s*s);
+  if (!imgData) return out;
+  const d=imgData.data, step=256/s;
+  for(let r=0;r<s;r++) for(let c=0;c<s;c++){
+    const px=Math.min(255,Math.floor(c*step)), py=Math.min(255,Math.floor(r*step));
+    const i=(py*256+px)*4;
+    const e=decodeGSI(d[i],d[i+1],d[i+2]);
+    out[r*s+c]=e!==null?e:0;
+  }
+  return out;
+}
+
+async function loadRegionElev(reg) {
+  const {zoom:z, ox, oy} = reg;
+  const {GRID:n, SMPL:s} = CFG;
+  const total=n*n, sz=n*s;
+  const arr=new Float32Array(sz*sz);
+  let done=0;
+
+  const setBar=()=>{
+    document.getElementById('ld-bar').style.width=(done/total*100)+'%';
+    document.getElementById('ld-msg').textContent=`タイル ${done}/${total} 読み込み中...`;
+  };
+
+  const promises=[];
+  for(let ty=0;ty<n;ty++) for(let tx=0;tx<n;tx++) {
+    const tx_=tx, ty_=ty;
+    const url1=gsiBuildUrl(z,ox+tx_,oy+ty_,'dem_png');
+    const url2=gsiBuildUrl(z,ox+tx_,oy+ty_,'demgm');
+
+    const p=fetchTile(url1).then(d=>d||fetchTile(url2)).then(d=>{
+      const smp=tileToSamples(d,s);
+      for(let r=0;r<s;r++) for(let c=0;c<s;c++)
+        arr[(ty_*s+r)*sz+(tx_*s+c)]=smp[r*s+c];
+      done++; setBar();
+    });
+    promises.push(p);
+  }
+  await Promise.all(promises);
+
+  // Check if mostly zero (CORS blocked) → fallback
+  let nonZero=0;
+  for(let i=0;i<arr.length;i++) if(Math.abs(arr[i])>0.5) nonZero++;
+  const pct=nonZero/arr.length;
+
+  return { arr, sz, fallback: pct<0.1 };
+}
+
+// ============================================================
+// TERRAIN GEOMETRY
+// ============================================================
+function computeSlopes(arr, sz) {
+  const slopes=new Float32Array(sz*sz*2);
+  const cellW=CFG.MSIZE/(sz-1);
+  for(let r=0;r<sz;r++) for(let c=0;c<sz;c++){
+    const i=r*sz+c;
+    const l=c>0    ? arr[r*sz+c-1] : arr[i];
+    const ri=c<sz-1? arr[r*sz+c+1] : arr[i];
+    const u=r>0    ? arr[(r-1)*sz+c]:arr[i];
+    const d=r<sz-1 ? arr[(r+1)*sz+c]:arr[i];
+    slopes[i*2]   = (ri-l)/(2*cellW);  // dElev/dx
+    slopes[i*2+1] = (d-u) /(2*cellW);  // dElev/dz
+  }
+  return slopes;
+}
+
+function buildMesh(arr, sz) {
+  const geo=new THREE.BufferGeometry();
+  const pos=new Float32Array(sz*sz*3);
+  const uvs=new Float32Array(sz*sz*2);
+  const elev=new Float32Array(sz*sz);
+  const slopes=computeSlopes(arr,sz);
+
+  for(let r=0;r<sz;r++) for(let c=0;c<sz;c++){
+    const i=r*sz+c;
+    pos[i*3]   = (c/(sz-1)-.5)*CFG.MSIZE;
+    pos[i*3+1] = 0;  // y set in shader via uVE
+    pos[i*3+2] = (r/(sz-1)-.5)*CFG.MSIZE;
+    uvs[i*2]   = c/(sz-1);
+    uvs[i*2+1] = r/(sz-1);
+    elev[i]    = arr[i];
+  }
+
+  const idx=[];
+  for(let r=0;r<sz-1;r++) for(let c=0;c<sz-1;c++){
+    const a=r*sz+c, b=r*sz+c+1, cc=(r+1)*sz+c, d=(r+1)*sz+c+1;
+    idx.push(a,b,cc, b,d,cc);
+  }
+
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('uv',       new THREE.BufferAttribute(uvs,2));
+  geo.setAttribute('elevation',new THREE.BufferAttribute(elev,1));
+  geo.setAttribute('slope',    new THREE.BufferAttribute(slopes,2));
+  geo.setIndex(idx);
+  return geo;
+}
+
+function statsOf(arr) {
+  let mn=Infinity, mx=-Infinity, sum=0;
+  for(const v of arr){ if(v<mn)mn=v; if(v>mx)mx=v; sum+=v; }
+  const avg=sum/arr.length;
+  let vs=0; for(const v of arr) vs+=(v-avg)**2;
+  const std=Math.sqrt(vs/arr.length);
+  const flat=Math.max(0,100-(std/Math.max(1,mx-mn)*100));
+  return { mn:mn.toFixed(0), mx:mx.toFixed(0), avg:avg.toFixed(0), std:std.toFixed(0), flat:flat.toFixed(1) };
+}
+
+// ============================================================
+// LOAD REGION
+// ============================================================
+let currentKey='kanto';
+
+async function loadRegion(key) {
+  currentKey=key;
+  const reg=REGIONS[key];
+  const load=document.getElementById('loading');
+  load.classList.remove('hide');
+  document.getElementById('ld-bar').style.width='0%';
+  document.getElementById('ld-msg').textContent='標高データを読み込み中...';
+  document.getElementById('rgn-lbl').textContent=reg.name;
+
+  // Move camera
+  Object.assign(orb, reg.cam); camUpdate();
+
+  let arr, sz;
+  try {
+    const res=await loadRegionElev(reg);
+    if (res.fallback) {
+      document.getElementById('ld-msg').textContent='⚠ CORS制限 — プロシージャル地形を使用';
+      await new Promise(r=>setTimeout(r,800));
+      sz=CFG.GRID*CFG.SMPL;
+      arr=proceduralTerrain(sz,key);
+    } else {
+      arr=res.arr; sz=res.sz;
+    }
+  } catch(_) {
+    sz=CFG.GRID*CFG.SMPL;
+    arr=proceduralTerrain(sz,key);
+  }
+
+  elevData=arr;
+  if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); }
+  mesh=new THREE.Mesh(buildMesh(arr,sz),mat);
+  scene.add(mesh);
+
+  const s=statsOf(arr);
+  document.getElementById('s-max').textContent=s.mx+' m';
+  document.getElementById('s-min').textContent=s.mn+' m';
+  document.getElementById('s-avg').textContent=s.avg+' m';
+  document.getElementById('s-std').textContent=s.std+' m';
+  document.getElementById('s-flat').textContent=s.flat+' %';
+
+  setTimeout(()=>load.classList.add('hide'), 350);
+}
+
+// ============================================================
+// UI EVENTS
+// ============================================================
+// VE slider
+const veEl=document.getElementById('ve-sl');
+const veV=document.getElementById('ve-val');
+veEl.addEventListener('input',()=>{
+  const v=parseFloat(veEl.value);
+  veV.textContent=v+'×';
+  uniforms.uVE.value=v;
+});
+
+// Contour slider
+const ctEl=document.getElementById('ct-sl');
+const ctV=document.getElementById('ct-val');
+ctEl.addEventListener('input',()=>{
+  const v=parseFloat(ctEl.value);
+  ctV.textContent=v+' m';
+  uniforms.uContour.value=v;
+});
+
+// Toggles
+function makeTgl(id, uKey) {
+  const el=document.getElementById(id);
+  let on=true;
+  el.addEventListener('click',()=>{
+    on=!on;
+    el.classList.toggle('on',on);
+    uniforms[uKey].value=on?1:0;
+  });
+}
+makeTgl('tgl-ct','uShowCt');
+makeTgl('tgl-sh','uShading');
+document.getElementById('tgl-oc').addEventListener('click',function(){
+  this.classList.toggle('on');
+  ocean.visible=this.classList.contains('on');
+});
+
+// Region buttons
+document.querySelectorAll('.rbtn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.rbtn').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    loadRegion(b.dataset.r);
+  });
+});
+
+// Resize
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ============================================================
+// ANIMATION
+// ============================================================
+(function loop(){
+  requestAnimationFrame(loop);
+  ocean.position.y=Math.sin(Date.now()*.0004)*.25-.6;
+  renderer.render(scene,camera);
+})();
+
+// ============================================================
+// PWA — SERVICE WORKER (blob for single-file / GitHub Pages)
+// ============================================================
+// ── GitHub Pages deployment note ──────────────────────────────────
+// For production, place sw.js in repo root (same level as index.html).
+// Registration: navigator.serviceWorker.register('./sw.js', { scope: './' })
+// sw.js must cache: '/', '/index.html', CDN scripts, GSI tile URLs.
+// For subpath deploys (username.github.io/repo/), set scope:'/repo/'
+//   and use __CACHE_BUST__ replaced by GitHub Actions workflow.
+// ──────────────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  const SW = `
+    const V='kfv-v1';
+    self.addEventListener('install',e=>{
+      e.waitUntil(caches.open(V).then(c=>c.addAll(['./'])).then(()=>self.skipWaiting()));
+    });
+    self.addEventListener('activate',e=>{
+      e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
+    });
+    self.addEventListener('fetch',e=>{
+      const url=e.request.url;
+      if(url.includes('cyberjapandata')||url.includes('googleapis')||url.includes('cdnjs')) {
+        e.respondWith(caches.open(V).then(c=>c.match(e.request).then(r=>{
+          const n=fetch(e.request).then(res=>{c.put(e.request,res.clone());return res;});
+          return r||n;
+        })));
+      } else {
+        e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
+      }
+    });
+  `;
+  try {
+    const blob=new Blob([SW],{type:'application/javascript'});
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+  } catch(_) {}
+}
+
+// ============================================================
+// INIT
+// ============================================================
+loadRegion('kanto');
+</script>
+</body>
+</html>
