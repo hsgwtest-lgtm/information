@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#4338ca" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="台湾旅行" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta property="og:title" content="台湾旅行ガイド 2026" />
+  <meta property="og:description" content="2026年5月 台湾旅行のスケジュール・マップ・トラベルツール" />
+  <meta property="og:type" content="website" />
+  <title>台湾旅行ガイド 2026</title>
+  <link rel="manifest" href="./manifest.json" />
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body, #root { height: 100%; }
+    body {
+      margin: 0;
+      font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+    /* Remove default Leaflet divIcon white box */
+    .leaflet-div-icon { background: none !important; border: none !important; }
+    /* Map container fills available space */
+    #map-root { height: 100%; width: 100%; }
+    /* Leaflet popup style tweak */
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    }
+    .leaflet-popup-content { margin: 10px 14px; }
+  </style>
+</head>
+<body class="bg-slate-50">
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ============================================================
+    // DATA
+    // ============================================================
+
+    const SCHEDULE = [
+      {
+        date: '5月2日（土）',
+        dayLabel: 'Day 1',
+        color: 'indigo',
+        events: [
+          { time: '01:00', name: '桃園国際空港 着', emoji: '✈️', cat: 'transport' },
+          { time: '12:00', name: '中正紀念堂', emoji: '🏛️', cat: 'sight' },
+          { time: '14:30', name: '永康街', emoji: '🛍️', cat: 'shop' },
+          { time: '17:30', name: '台北101', emoji: '🏙️', cat: 'sight' },
+          { time: '20:00', name: '臨江街夜市', emoji: '🍜', cat: 'food' },
+        ],
+      },
+      {
+        date: '5月3日（日）',
+        dayLabel: 'Day 2',
+        color: 'violet',
+        events: [
+          { time: '09:30', name: '故宮博物院', emoji: '🏺', cat: 'sight' },
+          { time: '13:00', name: '龍山寺', emoji: '⛩️', cat: 'sight' },
+          { time: '16:00', name: '西門町', emoji: '🛍️', cat: 'shop' },
+          { time: '19:00', name: '寧夏夜市', emoji: '🍢', cat: 'food' },
+        ],
+      },
+      {
+        date: '5月4日（月）',
+        dayLabel: 'Day 3',
+        color: 'rose',
+        events: [
+          { time: '11:00', name: '十分（ランタン上げ）', emoji: '🏮', cat: 'sight' },
+          { time: '15:30', name: '九份', emoji: '🌄', cat: 'sight' },
+          { time: '19:30', name: '饒河街夜市', emoji: '🍱', cat: 'food' },
+        ],
+      },
+      {
+        date: '5月5日（火）',
+        dayLabel: 'Day 4',
+        color: 'emerald',
+        events: [
+          { time: '10:00', name: '迪化街', emoji: '🏪', cat: 'shop' },
+          { time: '13:00', name: '中山 ランチ', emoji: '🍽️', cat: 'food' },
+          { time: '15:00', name: 'マッサージ', emoji: '💆', cat: 'leisure' },
+          { time: '18:00', name: '最後の晩餐', emoji: '🥢', cat: 'food' },
+          { time: '22:00', name: '空港へ移動', emoji: '🚕', cat: 'transport' },
+        ],
+      },
+      {
+        date: '5月6日（水）',
+        dayLabel: 'Day 5',
+        color: 'slate',
+        events: [
+          { time: '02:00', name: '帰国便 フライト', emoji: '✈️', cat: 'transport' },
+        ],
+      },
+    ];
+
+    const SPOTS = [
+      { name: 'リンクワールドホテル', lat: 25.0582, lng: 121.5336, emoji: '🏨', type: 'hotel' },
+      { name: '桃園国際空港', lat: 25.0773, lng: 121.2326, emoji: '✈️', type: 'transport' },
+      { name: '中正紀念堂', lat: 25.0353, lng: 121.5197, emoji: '🏛️', type: 'sight' },
+      { name: '永康街', lat: 25.0326, lng: 121.5296, emoji: '🛍️', type: 'shop' },
+      { name: '台北101', lat: 25.0338, lng: 121.5645, emoji: '🏙️', type: 'sight' },
+      { name: '臨江街夜市', lat: 25.0281, lng: 121.5534, emoji: '🍜', type: 'food' },
+      { name: '故宮博物院', lat: 25.1023, lng: 121.5484, emoji: '🏺', type: 'sight' },
+      { name: '龍山寺', lat: 25.0376, lng: 121.4995, emoji: '⛩️', type: 'sight' },
+      { name: '西門町', lat: 25.0425, lng: 121.5081, emoji: '🛍️', type: 'shop' },
+      { name: '寧夏夜市', lat: 25.0548, lng: 121.5157, emoji: '🍢', type: 'food' },
+      { name: '饒河街夜市', lat: 25.0487, lng: 121.5774, emoji: '🍱', type: 'food' },
+      { name: '迪化街', lat: 25.0572, lng: 121.5094, emoji: '🏪', type: 'shop' },
+      { name: '十分', lat: 25.0617, lng: 121.7797, emoji: '🏮', type: 'sight' },
+      { name: '九份', lat: 25.1089, lng: 121.8442, emoji: '🌄', type: 'sight' },
+    ];
+
+    const PHRASES = [
+      { jp: '袋はいりません', zh: '不要袋子', pinyin: 'Bù yào dài zi' },
+      { jp: 'お会計をお願いします', zh: '買單', pinyin: 'Mǎi dān' },
+      { jp: 'ありがとう', zh: '謝謝', pinyin: 'Xiè xie' },
+      { jp: 'いくらですか？', zh: '多少錢？', pinyin: 'Duō shǎo qián?' },
+      { jp: '辛くしないで', zh: '不要辣', pinyin: 'Bù yào là' },
+      { jp: 'これをください', zh: '我要這個', pinyin: 'Wǒ yào zhège' },
+      { jp: 'トイレはどこですか？', zh: '廁所在哪裡？', pinyin: 'Cèsuǒ zài nǎlǐ?' },
+      { jp: '写真を撮ってもいいですか？', zh: '可以拍照嗎？', pinyin: 'Kěyǐ pāizhào ma?' },
+    ];
+
+    const EMERGENCY = [
+      { label: 'ホテル電話', name: 'リンクワールドホテル', value: '+886-2-2506-5988', emoji: '🏨' },
+      { label: 'ホテル住所（中国語）', name: '臺北市中山區松江路90巷5號', value: '', emoji: '📍' },
+      { label: '警察', name: 'ポリス', value: '110', emoji: '🚔' },
+      { label: '救急・消防', name: '緊急通報', value: '119', emoji: '🚑' },
+      { label: '観光ホットライン', name: '24時間日本語対応', value: '0800-011-765', emoji: '📞' },
+      { label: '桃園国際空港', name: '案内センター', value: '+886-3-273-5081', emoji: '✈️' },
+    ];
+
+    // ============================================================
+    // STYLE MAPS
+    // ============================================================
+
+    const CAT_STYLE = {
+      transport: 'bg-slate-100 text-slate-600 border-slate-200',
+      sight:     'bg-indigo-50 text-indigo-700 border-indigo-200',
+      shop:      'bg-pink-50 text-pink-700 border-pink-200',
+      food:      'bg-amber-50 text-amber-700 border-amber-200',
+      leisure:   'bg-teal-50 text-teal-700 border-teal-200',
+    };
+
+    const DAY_DOT = {
+      indigo:  'bg-indigo-500',
+      violet:  'bg-violet-500',
+      rose:    'bg-rose-500',
+      emerald: 'bg-emerald-500',
+      slate:   'bg-slate-400',
+    };
+
+    const DAY_BADGE = {
+      indigo:  'bg-indigo-100 text-indigo-800',
+      violet:  'bg-violet-100 text-violet-800',
+      rose:    'bg-rose-100 text-rose-800',
+      emerald: 'bg-emerald-100 text-emerald-800',
+      slate:   'bg-slate-100 text-slate-700',
+    };
+
+    const SPOT_BG = {
+      hotel:     '#4338ca',
+      transport: '#64748b',
+      sight:     '#7c3aed',
+      shop:      '#db2777',
+      food:      '#d97706',
+    };
+
+    // ============================================================
+    // HEADER
+    // ============================================================
+
+    const TAB_SUBTITLES = {
+      schedule: '旅程スケジュール',
+      map:      '観光マップ',
+      tools:    'トラベルツール',
+    };
+
+    function Header({ tab }) {
+      return (
+        <header className="flex-shrink-0 bg-indigo-700 text-white z-40"
+                style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <span className="text-2xl leading-none">🇹🇼</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold text-sm leading-tight">台湾旅行 2026</div>
+              <div className="text-xs text-indigo-200 mt-0.5">{TAB_SUBTITLES[tab]}</div>
+            </div>
+            <span className="text-xs text-indigo-300 flex-shrink-0">5/2 – 5/6</span>
+          </div>
+        </header>
+      );
+    }
+
+    // ============================================================
+    // BOTTOM NAV
+    // ============================================================
+
+    const TABS = [
+      { id: 'schedule', label: '予定', emoji: '📅' },
+      { id: 'map',      label: 'マップ', emoji: '🗺️' },
+      { id: 'tools',    label: 'ツール', emoji: '🛠️' },
+    ];
+
+    function BottomNav({ tab, setTab }) {
+      return (
+        <nav className="flex-shrink-0 bg-white border-t border-slate-200 z-40"
+             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="flex">
+            {TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={`flex-1 flex flex-col items-center py-2 transition-colors ${
+                  tab === t.id ? 'text-indigo-600' : 'text-slate-400'
+                }`}
+              >
+                <span className="text-xl leading-none">{t.emoji}</span>
+                <span className={`text-xs mt-1 font-medium ${tab === t.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+                  {t.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </nav>
+      );
+    }
+
+    // ============================================================
+    // SCHEDULE TAB
+    // ============================================================
+
+    function ScheduleTab() {
+      return (
+        <div className="p-4 space-y-5">
+          {SCHEDULE.map((day, di) => (
+            <div key={di} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              {/* Day header */}
+              <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-100">
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${DAY_BADGE[day.color]}`}>
+                  {day.dayLabel}
+                </span>
+                <span className="font-semibold text-slate-700 text-sm">{day.date}</span>
+              </div>
+              {/* Timeline events */}
+              <div className="px-4 py-2">
+                {day.events.map((ev, ei) => (
+                  <div key={ei} className="flex gap-3 relative">
+                    {/* Vertical connector line */}
+                    {ei < day.events.length - 1 && (
+                      <div className="absolute left-[19px] top-[22px] bottom-0 w-px bg-slate-100" />
+                    )}
+                    {/* Timeline dot */}
+                    <div className="flex-shrink-0 w-[10px] mt-[11px] ml-[14px] z-10">
+                      <div className={`w-2.5 h-2.5 rounded-full ${DAY_DOT[day.color]}`} />
+                    </div>
+                    {/* Event content */}
+                    <div className="flex-1 pb-3 flex flex-wrap items-center gap-2 min-w-0">
+                      <span className="text-xs text-slate-400 w-11 flex-shrink-0 tabular-nums">{ev.time}</span>
+                      <div className={`inline-flex items-center gap-1.5 text-sm px-3 py-1 rounded-xl border ${CAT_STYLE[ev.cat]}`}>
+                        <span className="leading-none">{ev.emoji}</span>
+                        <span className="font-medium leading-snug">{ev.name}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ============================================================
+    // MAP TAB
+    // ============================================================
+
+    function MapTab({ active }) {
+      const containerRef = useRef(null);
+      const mapRef = useRef(null);
+
+      useEffect(() => {
+        if (!active) return;
+
+        if (mapRef.current) {
+          // Already initialized — just refresh tile layout
+          setTimeout(() => mapRef.current.invalidateSize(), 80);
+          return;
+        }
+
+        // Initialize Leaflet map centered on the hotel
+        const map = L.map(containerRef.current, { zoomControl: true })
+                     .setView([25.0582, 121.5336], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a> contributors',
+          maxZoom: 19,
+        }).addTo(map);
+
+        SPOTS.forEach(spot => {
+          const bg = SPOT_BG[spot.type] || '#4338ca';
+          const size = spot.type === 'hotel' ? 36 : 30;
+          const fontSize = spot.type === 'hotel' ? 20 : 16;
+          const icon = L.divIcon({
+            html: `<div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;font-size:${fontSize}px;background:${bg};border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3);border:2px solid white">${spot.emoji}</div>`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+            popupAnchor: [0, -(size / 2 + 4)],
+            className: '',
+          });
+
+          L.marker([spot.lat, spot.lng], { icon })
+            .addTo(map)
+            .bindPopup(
+              `<div style="font-family:-apple-system,'Hiragino Sans',sans-serif;font-size:13px;font-weight:600;color:#1e293b">${spot.name}</div>`,
+              { maxWidth: 180 }
+            );
+        });
+
+        mapRef.current = map;
+      }, [active]);
+
+      return <div id="map-root" ref={containerRef} />;
+    }
+
+    // ============================================================
+    // TOOLS TAB — Currency
+    // ============================================================
+
+    function CurrencyCard() {
+      const [twd, setTwd] = useState('');
+      const RATE = 4.7;
+      const jpy = twd !== '' && !isNaN(parseFloat(twd))
+        ? Math.round(parseFloat(twd) * RATE)
+        : null;
+
+      return (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-xl">💱</span>
+            <h3 className="font-semibold text-slate-700">通貨換算</h3>
+            <span className="text-xs text-slate-400 ml-auto">1 TWD = 4.7 円</span>
+          </div>
+          <div className="flex gap-2 items-center">
+            {/* TWD input */}
+            <div className="flex-1 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">NT$</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                className="w-full pl-11 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-base focus:outline-none focus:border-indigo-400 focus:bg-white transition-colors"
+                placeholder="0"
+                value={twd}
+                onChange={e => setTwd(e.target.value)}
+              />
+            </div>
+            <span className="text-slate-300 text-xl font-light">→</span>
+            {/* JPY result */}
+            <div className="flex-1 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">¥</span>
+              <div className="pl-8 pr-3 py-3 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700 font-bold text-base min-h-[50px] flex items-center">
+                {jpy !== null ? jpy.toLocaleString('ja-JP') : <span className="text-indigo-200 font-normal">—</span>}
+              </div>
+            </div>
+          </div>
+          {/* Quick reference */}
+          <div className="mt-3 grid grid-cols-4 gap-1.5">
+            {[100, 500, 1000, 3000].map(v => (
+              <button
+                key={v}
+                onClick={() => setTwd(String(v))}
+                className="text-xs py-1.5 rounded-lg bg-slate-100 text-slate-600 font-medium active:bg-indigo-100 active:text-indigo-700 transition-colors"
+              >
+                NT${v}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TOOLS TAB — Emergency
+    // ============================================================
+
+    function EmergencyCard() {
+      return (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">🆘</span>
+            <h3 className="font-semibold text-slate-700">緊急連絡先</h3>
+          </div>
+          <div className="space-y-0.5">
+            {EMERGENCY.map((item, i) => (
+              <div key={i} className="flex items-center gap-3 py-2.5 border-b border-slate-50 last:border-0">
+                <span className="text-lg w-7 text-center leading-none flex-shrink-0">{item.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-slate-400">{item.label}</div>
+                  <div className="text-sm text-slate-700 font-medium truncate">{item.name}</div>
+                </div>
+                {item.value && (
+                  <a
+                    href={`tel:${item.value.replace(/[^\d+]/g, '')}`}
+                    className="text-indigo-600 font-semibold text-sm whitespace-nowrap flex-shrink-0 active:text-indigo-400"
+                  >
+                    {item.value}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // TOOLS TAB — Phrases
+    // ============================================================
+
+    function PhrasesCard() {
+      const [copied, setCopied] = useState(null);
+
+      const handleCopy = (text, idx) => {
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).catch(() => {});
+        }
+        setCopied(idx);
+        setTimeout(() => setCopied(null), 1600);
+      };
+
+      return (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">💬</span>
+            <h3 className="font-semibold text-slate-700">中国語フレーズ</h3>
+          </div>
+          <div className="space-y-2">
+            {PHRASES.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => handleCopy(p.zh, i)}
+                className="w-full text-left p-3 rounded-xl bg-slate-50 border border-slate-100 active:bg-indigo-50 active:border-indigo-200 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-base font-bold text-slate-800">{p.zh}</div>
+                    <div className="text-xs text-slate-400 mt-0.5">{p.pinyin}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{p.jp}</div>
+                  </div>
+                  <span className={`text-xs flex-shrink-0 transition-colors ${
+                    copied === i ? 'text-emerald-500 font-semibold' : 'text-indigo-300'
+                  }`}>
+                    {copied === i ? '✓ コピー済' : 'タップでコピー'}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function ToolsTab() {
+      return (
+        <div className="p-4 space-y-4">
+          <CurrencyCard />
+          <EmergencyCard />
+          <PhrasesCard />
+        </div>
+      );
+    }
+
+    // ============================================================
+    // APP ROOT
+    // ============================================================
+
+    function App() {
+      const [tab, setTab] = useState('schedule');
+
+      return (
+        <div className="flex flex-col h-full overflow-hidden bg-slate-50">
+          <Header tab={tab} />
+
+          {/* Schedule — scrollable */}
+          <div
+            className={`flex-1 overflow-y-auto ${tab !== 'schedule' ? 'hidden' : ''}`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <ScheduleTab />
+          </div>
+
+          {/* Map — fills remaining space, always mounted after first visit */}
+          <div className={`flex-1 overflow-hidden ${tab !== 'map' ? 'hidden' : ''}`}>
+            <MapTab active={tab === 'map'} />
+          </div>
+
+          {/* Tools — scrollable */}
+          <div
+            className={`flex-1 overflow-y-auto ${tab !== 'tools' ? 'hidden' : ''}`}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <ToolsTab />
+          </div>
+
+          <BottomNav tab={tab} setTab={setTab} />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
