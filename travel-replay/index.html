@@ -656,17 +656,17 @@ async function processFiles(files) {
   for (let i = 0; i < points.length - 1; i++) {
     const p0 = points[i];
     const p1 = points[i + 1];
-    const distKm  = haversine(p0.lat, p0.lng, p1.lat, p1.lng);
-    const diffHrs = (p1.date - p0.date) / 3_600_000;
-    const speedKph = diffHrs > 0 ? distKm / diffHrs : 0;
-    p0.transportToNext = speedKph < 15 ? 'walk' : 'vehicle';
-    p0.speedKph = speedKph;
+    const distKm    = haversine(p0.lat, p0.lng, p1.lat, p1.lng);
+    const diffHours = (p1.date - p0.date) / 3_600_000;
+    const speedKmh  = diffHours > 0 ? distKm / diffHours : 0;
+    p0.transportToNext = speedKmh < 15 ? 'walk' : 'vehicle';
+    p0.speedKmh = speedKmh;
     p0.distKm   = distKm;
   }
   // Last point has no outgoing segment
   const lastPt = points[points.length - 1];
   lastPt.transportToNext = null;
-  lastPt.speedKph = 0;
+  lastPt.speedKmh = 0;
   lastPt.distKm   = 0;
 
   // Create Blob URLs for in-browser photo display
@@ -752,7 +752,7 @@ function buildPopupContent(pt) {
     speedEl.className = 'popup-speed';
     const icon = pt.transportToNext === 'vehicle' ? '🚃' : '🚶';
     speedEl.textContent =
-      `${icon} 次まで ${pt.distKm.toFixed(1)} km / ${Math.round(pt.speedKph)} km/h`;
+      `${icon} 次まで ${pt.distKm.toFixed(1)} km / ${Math.round(pt.speedKmh)} km/h`;
     wrap.appendChild(speedEl);
   }
 
