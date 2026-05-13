@@ -1,0 +1,24 @@
+{
+  "name": "Travel Replay Simulator",
+  "short_name": "Travel Replay",
+  "description": "旅行写真のGPS位置情報から移動軌跡をアニメーション再現するPWA",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%230f172a'/%3E%3Ctext y='148' x='16' font-size='128' font-family='Arial'%3E%F0%9F%97%BA%EF%B8%8F%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f172a'/%3E%3Ctext y='400' x='40' font-size='340' font-family='Arial'%3E%F0%9F%97%BA%EF%B8%8F%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["travel", "utilities", "photo"]
+}
