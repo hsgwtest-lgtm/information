@@ -585,14 +585,21 @@ async function extractExif(file) {
   try {
     const exif = await exifr.parse(file, {
       tiff: true, exif: true, gps: true,
-      translateValues: false,
-      reviveValues: true,   // DateTimeOriginal → JS Date object
+      reviveValues: true,   // DateTimeOriginal → JS Date object, GPS DMS → decimal
     });
     if (!exif) return null;
 
-    const lat = exif.latitude;
-    const lng = exif.longitude;
-    if (lat == null || lng == null) return null;
+    let lat = exif.latitude;
+    let lng = exif.longitude;
+
+    // Fallback: manually convert DMS arrays when computed properties are absent
+    if ((lat == null || lng == null) && exif.GPSLatitude && exif.GPSLongitude) {
+      const dms = ([d, m, s]) => d + m / 60 + (s || 0) / 3600;
+      lat = dms(exif.GPSLatitude)  * (/^S/i.test(exif.GPSLatitudeRef)  ? -1 : 1);
+      lng = dms(exif.GPSLongitude) * (/^W/i.test(exif.GPSLongitudeRef) ? -1 : 1);
+    }
+
+    if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
 
     // Use the most reliable timestamp available
     const dt = exif.DateTimeOriginal || exif.CreateDate || exif.DateTime;
