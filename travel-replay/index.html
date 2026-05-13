@@ -592,8 +592,8 @@ async function extractExif(file) {
     let lat = exif.latitude;
     let lng = exif.longitude;
 
-    // Fallback: manually convert DMS arrays when computed properties are absent
-    if ((lat == null || lng == null) && exif.GPSLatitude && exif.GPSLongitude) {
+    // Fallback: manually convert DMS arrays when computed properties are absent or NaN
+    if ((lat == null || lng == null || isNaN(lat) || isNaN(lng)) && exif.GPSLatitude && exif.GPSLongitude) {
       const dms = ([d, m, s]) => d + m / 60 + (s || 0) / 3600;
       lat = dms(exif.GPSLatitude)  * (/^S/i.test(exif.GPSLatitudeRef)  ? -1 : 1);
       lng = dms(exif.GPSLongitude) * (/^W/i.test(exif.GPSLongitudeRef) ? -1 : 1);
@@ -601,8 +601,17 @@ async function extractExif(file) {
 
     if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) return null;
 
-    // Use the most reliable timestamp available
-    const dt = exif.DateTimeOriginal || exif.CreateDate || exif.DateTime;
+    // Use the most reliable timestamp available.
+    // Note: exifr maps the IFD0 DateTime tag (0x0132) to "ModifyDate", not "DateTime".
+    let dt = exif.DateTimeOriginal || exif.CreateDate || exif.ModifyDate;
+
+    // Last resort: reconstruct timestamp from GPS date/time stamps (UTC)
+    if (!dt && exif.GPSDateStamp && exif.GPSTimeStamp) {
+      const [y, mo, d] = exif.GPSDateStamp.split(':').map(Number);
+      const [h, mi, s] = exif.GPSTimeStamp.split(':').map(Number);
+      dt = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+    }
+
     if (!dt) return null;
     const date = dt instanceof Date ? dt : new Date(dt);
     if (isNaN(date.getTime())) return null;
