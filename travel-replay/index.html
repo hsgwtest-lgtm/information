@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Travel Replay" />
+  <meta name="description" content="旅行写真のGPS位置情報から移動軌跡をアニメーション再現するPWA" />
+  <title>Travel Replay Simulator</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    /* ===== Reset & Variables ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0f172a;
+      --surface:     #1e293b;
+      --surface2:    #263248;
+      --border:      #334155;
+      --text:        #f1f5f9;
+      --muted:       #94a3b8;
+      --accent:      #3b82f6;
+      --accent-h:    #2563eb;
+      --safe-top:    env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%; width: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+
+    #app { height: 100%; width: 100%; display: flex; flex-direction: column; }
+
+    /* ===== Upload Screen ===== */
+    #upload-screen {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: calc(32px + var(--safe-top)) 24px calc(32px + var(--safe-bottom));
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    .upload-logo  { font-size: 52px; line-height: 1; }
+
+    .upload-title {
+      font-size: 26px;
+      font-weight: 800;
+      text-align: center;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .upload-sub {
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    .drop-zone {
+      width: 100%;
+      max-width: 380px;
+      min-height: 180px;
+      border: 2px dashed var(--border);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      padding: 28px 20px;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: rgba(59,130,246,0.06);
+    }
+    .drop-zone-icon { font-size: 40px; }
+    .drop-zone-text { font-size: 16px; font-weight: 600; }
+    .drop-zone-hint { font-size: 12px; color: var(--muted); }
+    .drop-zone-btn {
+      margin-top: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 28px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .drop-zone-btn:hover { background: var(--accent-h); }
+
+    #file-input {
+      position: absolute; inset: 0;
+      opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+
+    .heic-notice {
+      width: 100%;
+      max-width: 380px;
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #fbbf24;
+      line-height: 1.6;
+    }
+    .heic-notice strong { color: #f59e0b; }
+
+    /* ===== Loading Overlay ===== */
+    #loading-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,0.88);
+      z-index: 9999;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+    }
+    #loading-overlay.show { display: flex; }
+
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text    { font-size: 15px; color: var(--muted); }
+    #loading-progress{ font-size: 13px; color: var(--muted); opacity: 0.7; }
+
+    /* ===== Toast ===== */
+    #toast {
+      display: none;
+      position: fixed;
+      top: calc(20px + var(--safe-top));
+      left: 50%; transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 10px 20px;
+      font-size: 14px;
+      z-index: 10000;
+      max-width: 90vw;
+      white-space: pre-line;
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    #toast.show { display: block; animation: toastIn 0.25s ease; }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ===== Main Screen ===== */
+    #main-screen {
+      display: none;
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+    #main-screen.show { display: block; }
+
+    /* ===== Leaflet Map ===== */
+    #map { position: absolute; inset: 0; }
+
+    .leaflet-div-icon { background: none !important; border: none !important; }
+
+    .leaflet-popup-content-wrapper {
+      background: rgba(15,23,42,0.96);
+      color: var(--text);
+      border-radius: 14px;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+      border: 1px solid var(--border);
+    }
+    .leaflet-popup-tip { background: rgba(15,23,42,0.96); }
+    .leaflet-popup-content { margin: 12px 14px; }
+    .leaflet-popup-close-button { color: var(--muted) !important; top: 8px !important; right: 10px !important; }
+
+    /* Animated travel marker */
+    .travel-marker {
+      width: 38px; height: 38px;
+      background: rgba(15,23,42,0.9);
+      border: 2.5px solid rgba(255,255,255,0.85);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    /* Photo waypoint dot */
+    .photo-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.9);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    }
+
+    /* Popup content */
+    .popup-photo { width: 176px; text-align: center; }
+    .popup-photo img {
+      width: 100%; height: 112px;
+      object-fit: cover;
+      border-radius: 8px;
+      display: block;
+    }
+    .popup-placeholder {
+      width: 100%; height: 112px;
+      border-radius: 8px;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px;
+    }
+    .popup-time  { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .popup-speed { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ===== Top Bar ===== */
+    #top-bar {
+      position: absolute; top: 0; left: 0; right: 0;
+      z-index: 1000;
+      display: flex; align-items: center; gap: 8px;
+      padding: calc(10px + var(--safe-top)) 12px 10px;
+      background: linear-gradient(to bottom, rgba(15,23,42,0.95) 0%, transparent 100%);
+      pointer-events: none;
+    }
+    #top-bar > * { pointer-events: all; }
+
+    .glass-btn {
+      background: rgba(30,41,59,0.88);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 8px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    #trip-info {
+      flex: 1;
+      background: rgba(30,41,59,0.88);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 7px 12px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      min-width: 0;
+    }
+    #trip-title {
+      font-size: 13px; font-weight: 700;
+      display: block;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #trip-stats { font-size: 11px; color: var(--muted); }
+
+    /* ===== Bottom Panel ===== */
+    #bottom-panel {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      z-index: 1000;
+      background: rgba(15,23,42,0.93);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px calc(12px + var(--safe-bottom));
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+
+    /* Day badges */
+    #day-indicators { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .day-badge {
+      font-size: 11px; font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      color: #fff;
+    }
+
+    /* Progress bar */
+    #progress-labels {
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--muted);
+      margin-bottom: 5px;
+    }
+    #progress-track {
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+      margin-bottom: 12px;
+      touch-action: none;
+    }
+    #progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, var(--accent), #8b5cf6);
+      border-radius: 3px;
+      width: 0%;
+      pointer-events: none;
+    }
+    #progress-thumb {
+      position: absolute; top: 50%;
+      transform: translate(-50%, -50%);
+      width: 14px; height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+      left: 0%;
+      pointer-events: none;
+    }
+
+    /* Controls row */
+    #controls-row { display: flex; align-items: center; gap: 10px; }
+
+    #reset-btn {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    #reset-btn:hover { background: var(--border); }
+
+    #play-btn {
+      width: 50px; height: 50px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+      box-shadow: 0 2px 10px rgba(59,130,246,0.4);
+    }
+    #play-btn:hover { background: var(--accent-h); }
+
+    #time-display {
+      flex: 1;
+      text-align: center;
+      min-width: 0;
+    }
+    #current-time    { font-size: 16px; font-weight: 700; display: block; }
+    #transport-label { font-size: 12px; color: var(--muted); }
+
+    #speed-select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 7px 8px;
+      font-size: 13px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    /* Photo strip */
+    #photo-strip-wrap {
+      margin-top: 10px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    #photo-strip-wrap::-webkit-scrollbar { display: none; }
+    #photo-strip { display: flex; gap: 8px; padding: 2px 0; }
+
+    .strip-item {
+      flex-shrink: 0;
+      width: 52px; height: 52px;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color 0.2s, transform 0.1s;
+    }
+    .strip-item:active { transform: scale(0.93); }
+    .strip-item.active { border-color: var(--accent); }
+    .strip-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .strip-placeholder {
+      width: 100%; height: 100%;
+      background: var(--surface2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ===== Upload Screen ===== -->
+  <div id="upload-screen">
+    <div class="upload-logo">🗺️</div>
+    <div class="upload-title">Travel Replay Simulator</div>
+    <div class="upload-sub">
+      旅行写真をアップロードすると<br>
+      地図上で移動をアニメーション再現します
+    </div>
+
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept="image/*,.heic,.HEIC" multiple />
+      <div class="drop-zone-icon">📸</div>
+      <div class="drop-zone-text">写真を選択 / ドロップ</div>
+      <div class="drop-zone-hint">JPEG・HEIC など複数ファイル対応</div>
+      <button class="drop-zone-btn" type="button">ファイルを選ぶ</button>
+    </div>
+
+    <div class="heic-notice">
+      ⚠️ <strong>HEIC について</strong><br>
+      iPhoneのHEIC形式はブラウザでサムネイル表示できない場合があります。
+      EXIF位置情報の読み取りは可能ですが、写真のプレビューが表示されないことがあります。
+      プレビューが必要な場合は、カメラ設定を「互換性優先（JPEG）」に変更してください。
+    </div>
+  </div>
+
+  <!-- ===== Main Screen ===== -->
+  <div id="main-screen">
+    <div id="map"></div>
+
+    <!-- Top bar overlay -->
+    <div id="top-bar">
+      <button class="glass-btn" id="back-btn">← 戻る</button>
+      <div id="trip-info">
+        <span id="trip-title">読み込み中…</span>
+        <span id="trip-stats"></span>
+      </div>
+    </div>
+
+    <!-- Bottom panel overlay -->
+    <div id="bottom-panel">
+      <div id="day-indicators"></div>
+
+      <div id="progress-labels">
+        <span id="lbl-start">--:--</span>
+        <span id="lbl-now">--:--</span>
+        <span id="lbl-end">--:--</span>
+      </div>
+      <div id="progress-track">
+        <div id="progress-fill"></div>
+        <div id="progress-thumb"></div>
+      </div>
+
+      <div id="controls-row">
+        <button id="reset-btn" title="最初から">↺</button>
+        <button id="play-btn">▶</button>
+        <div id="time-display">
+          <span id="current-time">--:--</span>
+          <span id="transport-label"></span>
+        </div>
+        <select id="speed-select">
+          <option value="120">×120</option>
+          <option value="480" selected>×480</option>
+          <option value="1800">×1800</option>
+          <option value="7200">×7200</option>
+        </select>
+      </div>
+
+      <div id="photo-strip-wrap">
+        <div id="photo-strip"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text">写真を解析中…</div>
+  <div id="loading-progress"></div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.cjs"></script>
+
+<script>
+'use strict';
+
+// ============================================================
+// Constants
+// ============================================================
+
+/** One color per travel day, cycling if more days than colors */
+const DAY_COLORS = [
+  '#3b82f6', // blue
+  '#ef4444', // red
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#84cc16', // lime
+  '#a855f7', // purple
+];
+
+// ============================================================
+// Utility Functions
+// ============================================================
+
+/**
+ * Haversine great-circle distance.
+ * @returns distance in kilometres
+ */
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(Δφ / 2) ** 2
+          + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' });
+}
+function formatTime(d) {
+  return d.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
+function formatDateTime(d) {
+  return d.toLocaleString('ja-JP', {
+    month: 'numeric', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
+function showToast(msg, ms = 3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function showLoading(msg, sub) {
+  document.querySelector('#loading-overlay .loading-text').textContent = msg;
+  document.getElementById('loading-progress').textContent = sub || '';
+  document.getElementById('loading-overlay').classList.add('show');
+}
+function updateLoadingProgress(sub) {
+  document.getElementById('loading-progress').textContent = sub;
+}
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.remove('show');
+}
+
+// ============================================================
+// EXIF Extraction  (uses the exifr library)
+// ============================================================
+
+async function extractExif(file) {
+  try {
+    const exif = await exifr.parse(file, {
+      tiff: true, exif: true, gps: true,
+      translateValues: false,
+      reviveValues: true,   // DateTimeOriginal → JS Date object
+    });
+    if (!exif) return null;
+
+    const lat = exif.latitude;
+    const lng = exif.longitude;
+    if (lat == null || lng == null) return null;
+
+    // Use the most reliable timestamp available
+    const dt = exif.DateTimeOriginal || exif.CreateDate || exif.DateTime;
+    if (!dt) return null;
+    const date = dt instanceof Date ? dt : new Date(dt);
+    if (isNaN(date.getTime())) return null;
+
+    const isHEIC = /\.(heic|heif)$/i.test(file.name)
+                || file.type === 'image/heic'
+                || file.type === 'image/heif';
+
+    return { lat, lng, date, file, isHEIC };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// Data Processing
+// ============================================================
+
+async function processFiles(files) {
+  const points = [];
+
+  for (let i = 0; i < files.length; i++) {
+    updateLoadingProgress(`(${i + 1} / ${files.length})`);
+    const data = await extractExif(files[i]);
+    if (data) points.push(data);
+  }
+
+  if (points.length === 0) return null;
+
+  // Sort chronologically
+  points.sort((a, b) => a.date - b.date);
+
+  // Group into days by local calendar date
+  const dayMap = new Map();
+  for (const pt of points) {
+    const key = pt.date.toLocaleDateString('ja-JP');
+    if (!dayMap.has(key)) dayMap.set(key, { key, points: [] });
+    dayMap.get(key).points.push(pt);
+  }
+
+  const days = [...dayMap.values()].sort(
+    (a, b) => a.points[0].date - b.points[0].date
+  );
+
+  // Assign day index and color
+  days.forEach((day, i) => {
+    day.index   = i;
+    day.color   = DAY_COLORS[i % DAY_COLORS.length];
+    day.label   = `Day ${i + 1}`;
+    day.dateStr = formatDate(day.points[0].date);
+    day.points.forEach(pt => {
+      pt.dayIndex = i;
+      pt.dayColor = day.color;
+    });
+  });
+
+  // Compute speed and transport mode for each inter-point segment
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const distKm  = haversine(p0.lat, p0.lng, p1.lat, p1.lng);
+    const diffHrs = (p1.date - p0.date) / 3_600_000;
+    const speedKph = diffHrs > 0 ? distKm / diffHrs : 0;
+    p0.transportToNext = speedKph < 15 ? 'walk' : 'vehicle';
+    p0.speedKph = speedKph;
+    p0.distKm   = distKm;
+  }
+  // Last point has no outgoing segment
+  const lastPt = points[points.length - 1];
+  lastPt.transportToNext = null;
+  lastPt.speedKph = 0;
+  lastPt.distKm   = 0;
+
+  // Create Blob URLs for in-browser photo display
+  points.forEach(pt => { pt.objectURL = URL.createObjectURL(pt.file); });
+
+  return { days, points };
+}
+
+// ============================================================
+// Map & Layer Management
+// ============================================================
+
+let map           = null;
+const polylines   = {};   // dayIndex → L.Polyline
+let animMarker    = null;
+let photoDotMarkers = []; // mirrors points[] array
+
+function initMap(points) {
+  if (map) { map.remove(); map = null; }
+
+  map = L.map('map', { zoomControl: true, attributionControl: true });
+
+  // Dark CartoDB tiles — great contrast on dark UI
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+      '&copy; <a href="https://carto.com/">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(map);
+
+  const bounds = L.latLngBounds(points.map(p => [p.lat, p.lng]));
+  map.fitBounds(bounds, { padding: [60, 60] });
+}
+
+function markerIcon(transport) {
+  const emoji = transport === 'vehicle' ? '🚃' : '🚶';
+  return L.divIcon({
+    html: `<div class="travel-marker">${emoji}</div>`,
+    className: '',
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
+  });
+}
+
+function dotIcon(color) {
+  return L.divIcon({
+    html: `<div class="photo-dot" style="background:${color}"></div>`,
+    className: '',
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+  });
+}
+
+function buildPopupContent(pt) {
+  const wrap = document.createElement('div');
+  wrap.className = 'popup-photo';
+
+  if (pt.isHEIC) {
+    const ph = document.createElement('div');
+    ph.className = 'popup-placeholder';
+    ph.textContent = '📷';
+    wrap.appendChild(ph);
+  } else {
+    const img = document.createElement('img');
+    img.src = pt.objectURL;
+    img.onerror = () => {
+      const ph = document.createElement('div');
+      ph.className = 'popup-placeholder';
+      ph.textContent = '📷';
+      img.replaceWith(ph);
+    };
+    wrap.appendChild(img);
+  }
+
+  const timeEl = document.createElement('div');
+  timeEl.className = 'popup-time';
+  timeEl.textContent = formatDateTime(pt.date);
+  wrap.appendChild(timeEl);
+
+  if (pt.distKm > 0) {
+    const speedEl = document.createElement('div');
+    speedEl.className = 'popup-speed';
+    const icon = pt.transportToNext === 'vehicle' ? '🚃' : '🚶';
+    speedEl.textContent =
+      `${icon} 次まで ${pt.distKm.toFixed(1)} km / ${Math.round(pt.speedKph)} km/h`;
+    wrap.appendChild(speedEl);
+  }
+
+  return wrap;
+}
+
+function setupLayers(days, points) {
+  // Clear previous layers
+  photoDotMarkers.forEach(m => m.remove());
+  photoDotMarkers = [];
+  Object.values(polylines).forEach(l => l.remove());
+  Object.keys(polylines).forEach(k => delete polylines[k]);
+  if (animMarker) { animMarker.remove(); animMarker = null; }
+
+  // Empty polylines — one per day
+  days.forEach(day => {
+    polylines[day.index] = L.polyline([], {
+      color: day.color, weight: 4, opacity: 0.9,
+    }).addTo(map);
+  });
+
+  // Photo dot markers (start hidden, revealed during playback)
+  points.forEach(pt => {
+    const m = L.marker([pt.lat, pt.lng], { icon: dotIcon(pt.dayColor) });
+    m.bindPopup(buildPopupContent(pt), { maxWidth: 210 });
+    photoDotMarkers.push(m);
+    pt._dotMarker = m;
+    pt._dotAdded  = false;
+  });
+
+  // Animated travel marker at first point
+  const fp = points[0];
+  animMarker = L.marker([fp.lat, fp.lng], {
+    icon: markerIcon(fp.transportToNext || 'walk'),
+    zIndexOffset: 1000,
+  }).addTo(map);
+}
+
+// ============================================================
+// Animation Engine
+// ============================================================
+
+let anim      = null;   // current animation state object
+let rafId     = null;
+let lastRafTs = null;   // wall-clock time of the previous rAF callback (ms)
+
+/**
+ * Returns the interpolated position for a given real-time timestamp.
+ * @param {number} ts  Real-world timestamp in milliseconds
+ * @param {Array}  pts Sorted waypoints array
+ */
+function interpPosition(ts, pts) {
+  if (ts <= pts[0].date.getTime()) {
+    return { lat: pts[0].lat, lng: pts[0].lng,
+             segIdx: 0, transport: pts[0].transportToNext || 'walk' };
+  }
+  const last = pts[pts.length - 1];
+  if (ts >= last.date.getTime()) {
+    return { lat: last.lat, lng: last.lng,
+             segIdx: pts.length - 1, transport: null };
+  }
+  for (let i = 0; i < pts.length - 1; i++) {
+    const t0 = pts[i].date.getTime();
+    const t1 = pts[i + 1].date.getTime();
+    if (ts >= t0 && ts <= t1) {
+      const frac = t1 > t0 ? (ts - t0) / (t1 - t0) : 0;
+      return {
+        lat: pts[i].lat + (pts[i + 1].lat - pts[i].lat) * frac,
+        lng: pts[i].lng + (pts[i + 1].lng - pts[i].lng) * frac,
+        segIdx: i,
+        transport: pts[i].transportToNext || 'walk',
+      };
+    }
+  }
+  return null;
+}
+
+/** Apply the visual state for the current animation timestamp */
+function applyFrame(ts) {
+  const { points, startTs, endTs } = anim;
+  const pos = interpPosition(ts, points);
+  if (!pos) return;
+
+  // Move and update the travel marker
+  animMarker.setLatLng([pos.lat, pos.lng]);
+  animMarker.setIcon(markerIcon(pos.transport || 'walk'));
+
+  // Rebuild polylines: include all past waypoints + interpolated tip
+  const dayPts = {};
+  points.forEach(pt => { dayPts[pt.dayIndex] = []; });
+  points.forEach(pt => {
+    if (pt.date.getTime() <= ts) dayPts[pt.dayIndex].push([pt.lat, pt.lng]);
+  });
+  // Append the live marker position to the current day's polyline
+  const activeDayIdx = points[Math.min(pos.segIdx, points.length - 1)].dayIndex;
+  if (dayPts[activeDayIdx]) dayPts[activeDayIdx].push([pos.lat, pos.lng]);
+  Object.entries(dayPts).forEach(([idx, latlngs]) => {
+    if (polylines[idx]) polylines[idx].setLatLngs(latlngs);
+  });
+
+  // Show dot markers for already-visited waypoints
+  let latestIdx = -1;
+  points.forEach((pt, i) => {
+    if (pt.date.getTime() <= ts) {
+      if (!pt._dotAdded) { pt._dotMarker.addTo(map); pt._dotAdded = true; }
+      latestIdx = i;
+    } else {
+      if (pt._dotAdded) { pt._dotMarker.remove(); pt._dotAdded = false; }
+    }
+  });
+
+  // Auto-open popup when the marker first arrives at a waypoint
+  if (latestIdx >= 0 && latestIdx !== anim.lastPopupIdx) {
+    const pt = points[latestIdx];
+    pt._dotMarker.openPopup();
+    anim.lastPopupIdx = latestIdx;
+    clearTimeout(anim._popupTimer);
+    anim._popupTimer = setTimeout(() => pt._dotMarker.closePopup(), 2500);
+    highlightStrip(latestIdx);
+  }
+
+  // Update progress bar
+  const frac = (ts - startTs) / (endTs - startTs);
+  document.getElementById('progress-fill').style.width = `${frac * 100}%`;
+  document.getElementById('progress-thumb').style.left = `${frac * 100}%`;
+
+  // Update time and transport labels
+  const now = new Date(ts);
+  document.getElementById('lbl-now').textContent        = formatDateTime(now);
+  document.getElementById('current-time').textContent   = formatTime(now);
+  document.getElementById('transport-label').textContent =
+    pos.transport === 'vehicle' ? '🚃 移動中' :
+    pos.transport === 'walk'    ? '🚶 徒歩'   : '';
+}
+
+function rafCallback(wallNow) {
+  if (!anim || !anim.playing) return;
+
+  // speed = real seconds that pass per animation second
+  const speed = parseFloat(document.getElementById('speed-select').value);
+  if (lastRafTs !== null) {
+    anim.currentTs += (wallNow - lastRafTs) * speed;
+  }
+  lastRafTs = wallNow;
+
+  if (anim.currentTs >= anim.endTs) {
+    anim.currentTs = anim.endTs;
+    applyFrame(anim.endTs);
+    anim.playing = false;
+    document.getElementById('play-btn').textContent = '▶';
+    showToast('🎉 リプレイ完了！');
+    return;
+  }
+
+  applyFrame(anim.currentTs);
+  rafId = requestAnimationFrame(rafCallback);
+}
+
+function playAnim() {
+  if (!anim) return;
+  if (anim.currentTs >= anim.endTs) resetAnim();
+  anim.playing = true;
+  lastRafTs    = null;
+  document.getElementById('play-btn').textContent = '⏸';
+  rafId = requestAnimationFrame(rafCallback);
+}
+
+function pauseAnim() {
+  if (!anim) return;
+  anim.playing = false;
+  document.getElementById('play-btn').textContent = '▶';
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+function resetAnim() {
+  pauseAnim();
+  if (!anim) return;
+
+  anim.currentTs    = anim.startTs;
+  anim.lastPopupIdx = -1;
+  clearTimeout(anim._popupTimer);
+
+  Object.values(polylines).forEach(l => l.setLatLngs([]));
+  anim.points.forEach(pt => {
+    if (pt._dotAdded) { pt._dotMarker.remove(); pt._dotAdded = false; }
+  });
+  map.closePopup();
+
+  const fp = anim.points[0];
+  animMarker.setLatLng([fp.lat, fp.lng]);
+  animMarker.setIcon(markerIcon(fp.transportToNext || 'walk'));
+
+  document.getElementById('progress-fill').style.width  = '0%';
+  document.getElementById('progress-thumb').style.left  = '0%';
+  document.getElementById('lbl-now').textContent        = formatDateTime(new Date(anim.startTs));
+  document.getElementById('current-time').textContent   = formatTime(new Date(anim.startTs));
+  document.getElementById('transport-label').textContent = '';
+  highlightStrip(-1);
+}
+
+function seekTo(frac) {
+  if (!anim) return;
+  pauseAnim();
+  anim.currentTs    = anim.startTs + frac * (anim.endTs - anim.startTs);
+  anim.lastPopupIdx = -1;
+  applyFrame(anim.currentTs);
+}
+
+function initAnim(points) {
+  anim = {
+    points,
+    startTs:      points[0].date.getTime(),
+    endTs:        points[points.length - 1].date.getTime(),
+    currentTs:    points[0].date.getTime(),
+    playing:      false,
+    lastPopupIdx: -1,
+    _popupTimer:  null,
+  };
+}
+
+// ============================================================
+// Photo Strip
+// ============================================================
+
+function buildPhotoStrip(points) {
+  const strip = document.getElementById('photo-strip');
+  strip.innerHTML = '';
+
+  points.forEach((pt, i) => {
+    const el = document.createElement('div');
+    el.className     = 'strip-item';
+    el.dataset.index = i;
+    el.title         = formatDateTime(pt.date);
+
+    if (!pt.isHEIC) {
+      const img = document.createElement('img');
+      img.src = pt.objectURL;
+      img.onerror = () => {
+        const ph = document.createElement('div');
+        ph.className = 'strip-placeholder';
+        ph.textContent = '📷';
+        img.replaceWith(ph);
+      };
+      el.appendChild(img);
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'strip-placeholder';
+      ph.textContent = '📷';
+      el.appendChild(ph);
+    }
+
+    el.addEventListener('click', () => {
+      if (!anim) return;
+      const frac = (pt.date.getTime() - anim.startTs) / (anim.endTs - anim.startTs);
+      seekTo(frac);
+      map.setView([pt.lat, pt.lng], Math.max(map.getZoom(), 14), { animate: true });
+      setTimeout(() => pt._dotMarker.openPopup(), 400);
+      highlightStrip(i);
+    });
+
+    strip.appendChild(el);
+  });
+}
+
+function highlightStrip(index) {
+  document.querySelectorAll('.strip-item').forEach((el, i) => {
+    const active = i === index;
+    el.classList.toggle('active', active);
+    if (active) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  });
+}
+
+// ============================================================
+// UI Setup
+// ============================================================
+
+function buildDayBadges(days) {
+  const wrap = document.getElementById('day-indicators');
+  wrap.innerHTML = '';
+  days.forEach(day => {
+    const b = document.createElement('div');
+    b.className    = 'day-badge';
+    b.style.background = day.color;
+    b.textContent  = `${day.label} ${day.dateStr} (${day.points.length}枚)`;
+    wrap.appendChild(b);
+  });
+}
+
+function setupProgressBar() {
+  const track = document.getElementById('progress-track');
+  const seek  = (clientX) => {
+    const r    = track.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    seekTo(frac);
+  };
+
+  track.addEventListener('click', e => seek(e.clientX));
+
+  let dragging = false;
+  track.addEventListener('touchstart', e => {
+    dragging = true; seek(e.touches[0].clientX); e.preventDefault();
+  }, { passive: false });
+  track.addEventListener('touchmove', e => {
+    if (dragging) { seek(e.touches[0].clientX); e.preventDefault(); }
+  }, { passive: false });
+  track.addEventListener('touchend', () => { dragging = false; });
+}
+
+function showMainScreen(days, points) {
+  document.getElementById('upload-screen').style.display = 'none';
+  document.getElementById('main-screen').classList.add('show');
+
+  // Allow DOM layout to complete before initialising Leaflet
+  setTimeout(() => {
+    initMap(points);
+    setupLayers(days, points);
+    buildDayBadges(days);
+    buildPhotoStrip(points);
+    setupProgressBar();
+    initAnim(points);
+
+    // Populate time-range labels
+    document.getElementById('lbl-start').textContent    = formatDateTime(points[0].date);
+    document.getElementById('lbl-now').textContent      = formatDateTime(points[0].date);
+    document.getElementById('lbl-end').textContent      = formatDateTime(points[points.length - 1].date);
+    document.getElementById('current-time').textContent = formatTime(points[0].date);
+
+    document.getElementById('trip-title').textContent =
+      `${days.length}日間の旅行`;
+    document.getElementById('trip-stats').textContent =
+      ` · GPS付き写真 ${points.length}枚`;
+  }, 60);
+}
+
+// ============================================================
+// Event Handlers
+// ============================================================
+
+async function handleFiles(fileList) {
+  const files = Array.from(fileList).filter(f =>
+    f.type.startsWith('image/') ||
+    /\.(jpe?g|heic|heif|tiff?|png|webp)$/i.test(f.name)
+  );
+  if (!files.length) { showToast('⚠️ 画像ファイルが見つかりません'); return; }
+
+  showLoading('写真を解析中…', `(0 / ${files.length})`);
+
+  try {
+    const result = await processFiles(files);
+    hideLoading();
+
+    if (!result) {
+      showToast(
+        '⚠️ GPS位置情報を持つ写真が見つかりませんでした。\n' +
+        'iPhoneは「設定 → プライバシーとセキュリティ → 位置情報サービス → カメラ」を確認してください。',
+        7000
+      );
+      return;
+    }
+
+    const skipped = files.length - result.points.length;
+    if (skipped > 0) {
+      showToast(`ℹ️ ${skipped}枚はGPS情報なし／読み取り失敗のためスキップしました`, 4000);
+    }
+
+    showMainScreen(result.days, result.points);
+  } catch (err) {
+    hideLoading();
+    showToast(`⚠️ エラー: ${err.message}`, 5000);
+    console.error(err);
+  }
+}
+
+// File input change
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files.length) handleFiles(e.target.files);
+});
+
+// Drag-and-drop
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+});
+
+// Play / Pause
+document.getElementById('play-btn').addEventListener('click', () => {
+  if (!anim) return;
+  anim.playing ? pauseAnim() : playAnim();
+});
+
+// Reset
+document.getElementById('reset-btn').addEventListener('click', resetAnim);
+
+// Back to upload screen
+document.getElementById('back-btn').addEventListener('click', () => {
+  pauseAnim();
+  if (anim) {
+    clearTimeout(anim._popupTimer);
+    anim.points.forEach(pt => URL.revokeObjectURL(pt.objectURL));
+    anim = null;
+  }
+  if (map) { map.remove(); map = null; }
+  document.getElementById('main-screen').classList.remove('show');
+  document.getElementById('upload-screen').style.display = '';
+  document.getElementById('file-input').value = '';
+});
+
+// ============================================================
+// Service Worker Registration
+// ============================================================
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
