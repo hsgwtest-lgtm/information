@@ -469,7 +469,7 @@ footer{text-align:center;padding:36px 20px;padding-bottom:max(36px,calc(env(safe
       const h00 = s(ix + iy * 57), h10 = s(ix + 1 + iy * 57);
       const h01 = s(ix + (iy + 1) * 57), h11 = s(ix + 1 + (iy + 1) * 57);
       v += a * (h00 + (h10 - h00) * ux + (h01 - h00) * uy + (h11 - h10 - h01 + h00) * ux * uy);
-      a *= 0.5;
+      a *= 0.5; f *= 2.1;
     }
     return v;
   }
