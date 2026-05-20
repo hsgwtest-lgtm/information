@@ -480,8 +480,12 @@ function buildGround() {
 function calcSunPos(hourJST) {
   const DEG  = Math.PI / 180;
   const lat  = 35.36 * DEG;
-  const decl = 19.2  * DEG;   // declination July 27
-  const solarNoon = 11.78;    // approximate solar noon (JST) at Fuji
+  // Declination for July 27 ≈ 19.2° (23.45° × sin(360/365 × (284+208)))
+  const decl = 19.2  * DEG;
+  // Approximate solar noon at Fuji longitude 138.73°E for JST (UTC+9, 135°E):
+  //   longitudinal correction  = (138.73-135)/15 h ≈ +0.25 h
+  //   equation of time July 27 ≈ −0.11 h  →  noon ≈ 12.00 − 0.25 + 0.11 = 11.86 → ~11.78 h
+  const solarNoon = 11.78;
   const H = (hourJST - solarNoon) * 15 * DEG; // hour angle
 
   const sinAlt = Math.sin(lat) * Math.sin(decl) +
@@ -645,7 +649,9 @@ function animate() {
     c.position.x = c.userData.base.x + Math.sin(time * 0.18 + i * 1.1) * 0.22;
     c.position.y = c.userData.base.y + Math.sin(time * 0.13 + i * 0.7) * 0.06;
     c.children.forEach(ch => {
-      if (ch.material) ch.material.opacity = 0.28 + (1 - Math.max(0, -sunAltCurrent)) * 0.30;
+      // Clouds become more opaque as sun rises (0 = full night, 1 = midday)
+      const dayFactor = Math.max(0, Math.min(1, sunAltCurrent / 0.5));
+      if (ch.material) ch.material.opacity = 0.28 + dayFactor * 0.30;
     });
   });
 
