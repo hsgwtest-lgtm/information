@@ -895,7 +895,7 @@ footer {
   position: absolute;
   bottom: 0; left: 0; right: 0;
   height: 96px;
-  background: linear-gradient(170deg, var(--a) 0%, rgba(245,166,35,0.15) 60%, transparent 100%);
+  background: linear-gradient(170deg, var(--a) 0%, var(--a-lo) 60%, transparent 100%);
   clip-path: polygon(50% 0%, 88% 100%, 12% 100%);
   animation: mountPulse 2.2s ease-in-out infinite;
 }
@@ -941,7 +941,7 @@ footer {
 #load-fill {
   height: 100%;
   width: 0%;
-  background: linear-gradient(90deg, var(--a), rgba(245,166,35,0.55));
+  background: linear-gradient(90deg, var(--a), var(--a-md));
   border-radius: 2px;
   transition: width 0.28s ease;
 }
