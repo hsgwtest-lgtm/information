@@ -201,10 +201,10 @@ html, body {
   margin-left: 4px;
 }
 
-/* ─── Axes legend ─── */
-#axes-legend {
+/* ─── Coordinate display (bottom right) ─── */
+#coord-display {
   position: fixed;
-  bottom: calc(var(--safe-b) + 200px);
+  bottom: calc(var(--safe-b) + 8px);
   right: 14px;
   background: rgba(8, 20, 48, 0.80);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -212,16 +212,12 @@ html, body {
   padding: 7px 11px;
   font-size: 11px;
   pointer-events: none;
-  z-index: 3;
-  line-height: 2;
+  z-index: 4;
+  line-height: 1.95;
 }
-.ax-title {
-  font-size: 10px;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-  margin-bottom: 2px;
-}
-.ax-row { display: flex; align-items: center; gap: 6px; }
+.cd-row { display: flex; align-items: center; gap: 6px; }
+.cd-lbl { font-size: 10px; color: var(--muted); min-width: 26px; }
+.cd-val { font-variant-numeric: tabular-nums; min-width: 54px; font-size: 10px; letter-spacing: 0.02em; }
 .ax-x { color: #ff4444; font-weight: 900; font-size: 14px; }
 .ax-y { color: #44ff44; font-weight: 900; font-size: 14px; }
 .ax-z { color: #4488ff; font-weight: 900; font-size: 14px; }
