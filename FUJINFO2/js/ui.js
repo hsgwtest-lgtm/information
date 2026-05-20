@@ -254,9 +254,11 @@ function renderTemps() {
 
       const fill = document.createElement('div');
       fill.className = `temp-bar-fill ${cls}`;
-      // Width will be set after mount via rAF for animation
+      // Width will be set after mount via rAF for animation.
+      // Clamp to 0 for the bar width; negative temps show as a minimal 2% sliver.
       fill.style.width = '0%';
-      fill.dataset.target = Math.max(0, val) / maxTemp * 100 + '%';
+      const barPct = val <= 0 ? 2 : Math.max(2, val / maxTemp * 100);
+      fill.dataset.target = barPct + '%';
 
       track.appendChild(fill);
 

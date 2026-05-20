@@ -235,7 +235,6 @@
 }
 
 #elev-summit-label {
-  margin-top: env(safe-area-inset-top, 0px);
   margin-top: calc(env(safe-area-inset-top, 0px) + 4px);
   writing-mode: vertical-rl;
   text-orientation: mixed;
