@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="富士山INFO">
+  <meta name="theme-color" content="#050d1a">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>富士山 登山INFO 2026</title>
+</head>
+<body class="plan-a">
+
+  <!-- Three.js canvas (fixed background) -->
+  <canvas id="canvas"></canvas>
+
+  <!-- 3D route labels (positioned by JS) -->
+  <div id="labels" aria-hidden="true">
+    <div id="label-trail"  class="route-label">吉田口<br><small>2,305m</small></div>
+    <div id="label-summit" class="route-label summit-label">🗻 山頂<br><small>3,776m</small></div>
+  </div>
+
+  <!-- HUD: simulated time + altitude conditions -->
+  <div id="hud">
+    <div id="hud-time">--:--</div>
+    <div id="hud-cond">
+      <div class="hc-row"><span class="hc-ico">📍</span><span id="hud-alt">—</span></div>
+      <div class="hc-row"><span class="hc-ico">🌡</span><span id="hud-temp">—</span></div>
+      <div class="hc-row"><span class="hc-ico">💨</span><span id="hud-wind">—</span></div>
+      <div class="hc-row"><span class="hc-ico">☀️</span><span id="hud-uv">—</span></div>
+    </div>
+  </div>
+
+  <!-- View preset buttons (bottom-left) -->
+  <div id="view-btns">
+    <button class="view-btn active" id="vbtn-full"   onclick="setView('full')"   title="全体表示">🗺️</button>
+    <button class="view-btn"        id="vbtn-mid"    onclick="setView('mid')"    title="中腹ビュー">⛰</button>
+    <button class="view-btn"        id="vbtn-summit" onclick="setView('summit')" title="山頂ビュー">🏔</button>
+  </div>
+
+  <!-- App UI (scrollable overlay) -->
+  <div id="app">
+
+    <!-- Hero -->
+    <header id="hero">
+      <div id="hero-inner">
+        <div id="badge">2026.07.26 — 07.27</div>
+        <h1 id="hero-title">富士山<br>登山INFO</h1>
+        <p id="hero-sub">吉田ルート · 星観荘泊 · 3名 · リアル3D地形</p>
+
+        <div id="plan-toggle">
+          <button id="btn-a" class="plan-btn active" onclick="switchPlan('A')">
+            <span class="plan-emoji">🌄</span>
+            <span class="plan-name">Plan A</span>
+            <span class="plan-label">ご来光</span>
+          </button>
+          <button id="btn-b" class="plan-btn" onclick="switchPlan('B')">
+            <span class="plan-emoji">☀️</span>
+            <span class="plan-name">Plan B</span>
+            <span class="plan-label">昼間登山</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="scroll-hint">
+        <span>スクロールで詳細を見る</span>
+        <div id="scroll-arrow">↓</div>
+      </div>
+    </header>
+
+    <!-- Main scrollable content -->
+    <main id="main">
+
+      <!-- Plan summary card -->
+      <div id="plan-card" class="glass-card plan-card-inner">
+        <div id="plan-card-icon">🌄</div>
+        <div>
+          <h3 id="plan-card-title">Plan A — ご来光バージョン</h3>
+          <p id="plan-card-desc">深夜1:00出発 → 山頂でご来光を鑑賞</p>
+        </div>
+      </div>
+
+      <!-- Timeline -->
+      <section>
+        <div class="section-header">
+          <h2>⏱ タイムライン</h2>
+          <div class="timeline-header-right">
+            <button id="btn-play" class="play-btn" onclick="togglePlayback()" title="再生 / 一時停止">▶</button>
+            <p class="hint">タップでその時刻の空・標高を表示</p>
+          </div>
+        </div>
+        <div id="timeline"></div>
+      </section>
+
+      <!-- Temperature -->
+      <section>
+        <div class="section-header">
+          <h2>🌡 標高別気温</h2>
+          <p class="hint">7月の目安（体感はさらに低い）</p>
+        </div>
+        <div id="temp-list"></div>
+      </section>
+
+      <!-- Gear checklist -->
+      <section>
+        <div class="section-header">
+          <h2>🎒 持ち物チェック</h2>
+          <p class="hint" id="gear-progress">0 / 0 完了</p>
+        </div>
+        <div id="gear-list"></div>
+        <button id="gear-reset" onclick="resetGear()">チェックをリセット</button>
+      </section>
+
+      <!-- AMS -->
+      <section>
+        <div class="section-header">
+          <h2>⚠️ 高山病対策</h2>
+        </div>
+        <div class="glass-card ams-card">
+          <div class="ams-row red">
+            <span class="ams-label">症状</span>
+            <span>頭痛・吐き気・めまい・疲労感・食欲不振</span>
+          </div>
+          <div class="ams-row">
+            <span class="ams-label">予防</span>
+            <ul>
+              <li>五合目で30分以上高所順応（必須）</li>
+              <li>会話できるペースでゆっくり登る</li>
+              <li>1時間に200〜300ml水分補給</li>
+              <li>深呼吸を意識する</li>
+              <li>前日は禁酒・十分な睡眠</li>
+            </ul>
+          </div>
+          <div class="ams-row orange">
+            <span class="ams-label">発症時</span>
+            <span>1名でも症状が出たら<strong>全員即下山</strong><br>下山すれば急速に回復します</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Emergency -->
+      <section>
+        <div class="section-header">
+          <h2>🚨 緊急連絡先</h2>
+        </div>
+        <div id="emergency-list">
+          <a class="emergency-card glass-card" href="tel:0555730110">
+            <div class="ec-left">
+              <div class="ec-icon">🚁</div>
+              <div>
+                <div class="ec-name">山梨県警察 山岳救助隊</div>
+                <div class="ec-num">0555-73-0110</div>
+              </div>
+            </div>
+            <div class="ec-call">📞</div>
+          </a>
+          <a class="emergency-card glass-card" href="tel:0555246516">
+            <div class="ec-left">
+              <div class="ec-icon">🏔</div>
+              <div>
+                <div class="ec-name">六合目 安全指導センター</div>
+                <div class="ec-num">0555-24-6516</div>
+              </div>
+            </div>
+            <div class="ec-call">📞</div>
+          </a>
+        </div>
+      </section>
+
+      <footer>富士山登山INFO 2026 · 吉田ルート · 星観荘 · GSI リアル3D地形</footer>
+    </main>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading">
+    <div id="loading-fuji">🗻</div>
+    <div id="loading-bar"><div id="loading-fill"></div></div>
+    <div id="loading-text">富士山を描画中…</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
