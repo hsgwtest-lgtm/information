@@ -379,9 +379,8 @@ function buildRoutes() {
     // ウェイポイントマーカー
     const sphereMats = [];
     route.wps.forEach((wp, wi) => {
-      const isEndpoint = wi === 0 || wi === route.wps.length - 1;
       const pt  = geo3(wp.lat, wp.lon, 0.05);
-      const rad = isEndpoint ? 0.030 : 0.018;
+      const rad = (wi === 0 || wi === route.wps.length - 1) ? 0.030 : 0.018;
       const mat = new THREE.MeshBasicMaterial({ color: route.color, transparent: true, opacity: 1 });
       const s   = new THREE.Mesh(new THREE.SphereGeometry(rad, 8, 8), mat);
       s.position.copy(pt);
