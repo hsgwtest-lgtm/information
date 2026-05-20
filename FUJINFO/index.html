@@ -32,8 +32,8 @@
       </div>
     </div>
     <div id="plan-pills" role="group" aria-label="登山プランを選択">
-      <button id="btn-a" class="plan-pill active" onclick="switchPlan('A')">🌄 Plan A</button>
-      <button id="btn-b" class="plan-pill"        onclick="switchPlan('B')">☀️ Plan B</button>
+      <button id="btn-a" class="plan-pill active" onclick="switchPlan('A')">☀️ Plan A</button>
+      <button id="btn-b" class="plan-pill"        onclick="switchPlan('B')">🌄 Plan B</button>
     </div>
   </header>
 
@@ -46,6 +46,12 @@
 
   <!-- ── Content panel (fixed bottom sheet) ─────────────────── -->
   <div id="panel" role="main">
+
+    <!-- Panel grip: tap to toggle viewing mode -->
+    <div id="panel-grip" onclick="toggleViewMode()" role="button" aria-label="鑑賞モード切替">
+      <div id="grip-line"></div>
+      <span id="grip-label">🗻 鑑賞モード</span>
+    </div>
 
     <!-- Step info strip: appears when a timeline step is selected -->
     <div id="step-strip" class="hidden" aria-live="polite">
@@ -68,10 +74,6 @@
         <span class="tab-lbl">装備</span>
         <span id="gear-badge" class="tab-badge" aria-label="チェック済み数"></span>
       </button>
-      <button class="tab-btn" role="tab" aria-selected="false" data-tab="temp" onclick="showTab('temp')">
-        <span class="tab-ico" aria-hidden="true">🌡</span>
-        <span class="tab-lbl">気温</span>
-      </button>
       <button class="tab-btn" role="tab" aria-selected="false" data-tab="info" onclick="showTab('info')">
         <span class="tab-ico" aria-hidden="true">ℹ️</span>
         <span class="tab-lbl">情報</span>
@@ -85,10 +87,10 @@
       <div id="pane-timeline" class="pane active" role="tabpanel">
         <div id="tl-bar">
           <div id="plan-summary">
-            <span id="ps-ico" aria-hidden="true">🌄</span>
+            <span id="ps-ico" aria-hidden="true">☀️</span>
             <div id="ps-text">
-              <div id="ps-title">Plan A — ご来光バージョン</div>
-              <div id="ps-desc">深夜1:00出発 → 山頂でご来光を鑑賞</div>
+              <div id="ps-title">Plan A — 昼間登山バージョン</div>
+              <div id="ps-desc">朝5:00出発 → 山頂 · お鉢巡り</div>
             </div>
           </div>
           <button id="btn-play" class="play-btn" onclick="togglePlayback()" aria-label="タイムライン再生/停止">▶</button>
@@ -108,8 +110,9 @@
         <div id="gear-list" role="list"></div>
       </div>
 
-      <!-- ─ TEMP TAB ──────────────────────────────────────── -->
-      <div id="pane-temp" class="pane" role="tabpanel">
+      <!-- ─ TEMP + INFO TAB (merged) ─────────────────────────── -->
+      <div id="pane-info" class="pane" role="tabpanel">
+
         <div class="pane-hd">
           <div>
             <h2 class="pane-title">🌡 標高別気温</h2>
@@ -117,10 +120,6 @@
           </div>
         </div>
         <div id="temp-list" role="list"></div>
-      </div>
-
-      <!-- ─ INFO TAB ──────────────────────────────────────── -->
-      <div id="pane-info" class="pane" role="tabpanel">
 
         <section class="info-sec">
           <h2 class="info-title">⚠️ 高山病対策</h2>

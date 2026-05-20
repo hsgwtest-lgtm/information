@@ -6,7 +6,24 @@
 
 const PLANS = {
   A: {
-    icon: '🌄', title: 'Plan A — ご来光バージョン',
+    icon: '☀️', title: 'Plan A — 昼間登山バージョン',
+    desc: '朝5:00出発 → 山頂 · お鉢巡り',
+    steps: [
+      { day:'7/26', time:'12:00', h:12.0, icon:'🚌', loc:'富士山駅 / 河口湖駅', temp:null,   note:'シャトルバスで五合目へ（約50分）', t:0.00 },
+      { day:'7/26', time:'13:00', h:13.0, icon:'🏔', loc:'五合目着（2,305m）',   temp:'16℃', note:'⚠️ 30分以上 高所順応（必須）',       t:0.06, hl:true },
+      { day:'7/26', time:'14:00', h:14.0, icon:'🏠', loc:'星観荘 チェックイン', temp:'15℃', note:'六合目 · 荷物整理 · 軽装に切替',    t:0.09, hl:true },
+      { day:'7/26', time:'18:00', h:18.0, icon:'😴', loc:'夕食・就寝',           temp:'12℃', note:'アラームを朝4:30にセット',          t:0.09 },
+      { day:'7/27', time:'05:00', h: 5.0, icon:'☀️', loc:'星観荘 出発',          temp:'12℃', note:'明るくなってから · 視界良好',       t:0.09, hl:true },
+      { day:'7/27', time:'07:00', h: 7.0, icon:'⛰', loc:'七合目（2,700m）',     temp:'9℃',  note:'休憩 · 行動食 · 水分補給',          t:0.38 },
+      { day:'7/27', time:'08:30', h: 8.5, icon:'⛰', loc:'八合目（3,100m）',     temp:'7℃',  note:'休憩 · 防寒調整',                   t:0.62 },
+      { day:'7/27', time:'09:30', h: 9.5, icon:'🏔', loc:'山頂着（3,776m）',     temp:'6℃',  note:'日差しあり · 景色良好',             t:1.00, hl:true },
+      { day:'7/27', time:'10:00', h:10.0, icon:'🔵', loc:'お鉢巡り',             temp:'6℃',  note:'混雑少なめ',                        t:1.00 },
+      { day:'7/27', time:'11:30', h:11.5, icon:'⬇️', loc:'下山開始',             temp:'↑',   note:'吉田ルート下山道（砂礫）',          t:0.55 },
+      { day:'7/27', time:'14:30', h:14.5, icon:'✅', loc:'五合目 下山完了',      temp:'16℃', note:'シャトルバスで麓へ',                t:0.00, hl:true },
+    ],
+  },
+  B: {
+    icon: '🌄', title: 'Plan B — ご来光バージョン',
     desc: '深夜1:00出発 → 山頂でご来光を鑑賞',
     steps: [
       { day:'7/26', time:'12:00', h:12.0, icon:'🚌', loc:'富士山駅 / 河口湖駅', temp:null,   note:'シャトルバスで五合目へ（約50分）', t:0.00 },
@@ -21,23 +38,6 @@ const PLANS = {
       { day:'7/27', time:'05:30', h: 5.5, icon:'🔵', loc:'お鉢巡り',             temp:'2℃',  note:'時計回り 約3.5km',                  t:1.00 },
       { day:'7/27', time:'07:00', h: 7.0, icon:'⬇️', loc:'下山開始',             temp:'↑',   note:'吉田ルート下山道（砂礫）',          t:0.55 },
       { day:'7/27', time:'10:00', h:10.0, icon:'✅', loc:'五合目 下山完了',      temp:'16℃', note:'シャトルバスで麓へ',                t:0.00, hl:true },
-    ],
-  },
-  B: {
-    icon: '☀️', title: 'Plan B — 昼間登山バージョン',
-    desc: '朝5:00出発 → 山頂 · お鉢巡り',
-    steps: [
-      { day:'7/26', time:'12:00', h:12.0, icon:'🚌', loc:'富士山駅 / 河口湖駅', temp:null,   note:'シャトルバスで五合目へ（約50分）', t:0.00 },
-      { day:'7/26', time:'13:00', h:13.0, icon:'🏔', loc:'五合目着（2,305m）',   temp:'16℃', note:'⚠️ 30分以上 高所順応（必須）',       t:0.06, hl:true },
-      { day:'7/26', time:'14:00', h:14.0, icon:'🏠', loc:'星観荘 チェックイン', temp:'15℃', note:'六合目 · 荷物整理 · 軽装に切替',    t:0.09, hl:true },
-      { day:'7/26', time:'18:00', h:18.0, icon:'😴', loc:'夕食・就寝',           temp:'12℃', note:'アラームを朝4:30にセット',          t:0.09 },
-      { day:'7/27', time:'05:00', h: 5.0, icon:'☀️', loc:'星観荘 出発',          temp:'12℃', note:'明るくなってから · 視界良好',       t:0.09, hl:true },
-      { day:'7/27', time:'07:00', h: 7.0, icon:'⛰', loc:'七合目（2,700m）',     temp:'9℃',  note:'休憩 · 行動食 · 水分補給',          t:0.38 },
-      { day:'7/27', time:'08:30', h: 8.5, icon:'⛰', loc:'八合目（3,100m）',     temp:'7℃',  note:'休憩 · 防寒調整',                   t:0.62 },
-      { day:'7/27', time:'09:30', h: 9.5, icon:'🏔', loc:'山頂着（3,776m）',     temp:'6℃',  note:'日差しあり · 景色良好',             t:1.00, hl:true },
-      { day:'7/27', time:'10:00', h:10.0, icon:'🔵', loc:'お鉢巡り',             temp:'6℃',  note:'混雑少なめ',                        t:1.00 },
-      { day:'7/27', time:'11:30', h:11.5, icon:'⬇️', loc:'下山開始',             temp:'↑',   note:'吉田ルート下山道（砂礫）',          t:0.55 },
-      { day:'7/27', time:'14:30', h:14.5, icon:'✅', loc:'五合目 下山完了',      temp:'16℃', note:'シャトルバスで麓へ',                t:0.00, hl:true },
     ],
   },
 };
@@ -58,13 +58,13 @@ const GEAR = [
     { name:'レインウェア 上下', note:'防寒・防風を兼ねる。ゴアテックス推奨', req:true },
     { name:'登山パンツ', note:'ジーンズ厳禁（重い・乾かない）', req:true },
     { name:'厚手の手袋', note:'山頂は指先が悴む', req:true },
-    { name:'ニット帽・ネックウォーマー', note:'深夜の寒さ対策', pa:true },
-    { name:'日差し用帽子（つば付き）', note:'紫外線対策', pb:true },
+    { name:'ニット帽・ネックウォーマー', note:'深夜の寒さ対策', pb:true },
+    { name:'日差し用帽子（つば付き）', note:'紫外線対策', pa:true },
     { name:'トレッキングシューズ（ハイカット）', note:'スニーカー不可', req:true },
     { name:'厚手の登山用靴下＋替え', req:true },
   ]},
   { cat:'🔦 装備・道具', items:[
-    { name:'ヘッドライト＋予備電池', note:'スマホライト不可', pa:true },
+    { name:'ヘッドライト＋予備電池', note:'スマホライト不可', pb:true },
     { name:'登山用ストック', note:'下山の膝負担を大幅軽減' },
     { name:'ヘルメット', note:'六合目で貸出可（2,000円デポジット）' },
     { name:'リュック（20〜30L）', req:true },
@@ -74,7 +74,7 @@ const GEAR = [
   { cat:'🍙 食料・飲料', items:[
     { name:'水 1.5〜2L / 人', note:'山小屋でも買えるが高額（500円〜）', req:true },
     { name:'行動食（チョコ・ゼリー・おにぎり）', note:'こまめにエネルギー補給', req:true },
-    { name:'温かい飲み物（魔法瓶）', note:'深夜の寒さに効果大', pa:true },
+    { name:'温かい飲み物（魔法瓶）', note:'深夜の寒さに効果大', pb:true },
     { name:'塩分補給タブレット', note:'電解質補給' },
   ]},
   { cat:'💊 薬・衛生用品', items:[
@@ -210,6 +210,7 @@ let checkedGear    = loadGearState();
 let isPlaying      = false;
 let playbackIdx    = 0;
 let playbackTimeout = null;
+let viewMode       = false;
 
 function loadGearState() {
   try { const s = localStorage.getItem('fujinfo-gear-2026'); return s ? new Set(JSON.parse(s)) : new Set(); }
@@ -911,7 +912,7 @@ function buildTemps() {
       <span class="temp-place">${t.place}</span>
       <div class="temp-vals">
         <span class="temp-day-v">${t.day}</span>
-        <span class="temp-night-v">${plan === 'A' ? t.night : t.day}</span>
+        <span class="temp-night-v">${plan === 'B' ? t.night : t.day}</span>
       </div>
     </div>`).join('');
 }
@@ -1032,7 +1033,8 @@ function onStepSelect(idx, t) {
 function switchPlan(plan) {
   if (currentPlan === plan) return;
   currentPlan = plan;
-  document.body.className = 'plan-' + plan.toLowerCase();
+  document.body.classList.remove('plan-a', 'plan-b');
+  document.body.classList.add('plan-' + plan.toLowerCase());
 
   document.getElementById('btn-a').classList.toggle('active', plan === 'A');
   document.getElementById('btn-b').classList.toggle('active', plan === 'B');
@@ -1055,9 +1057,20 @@ function switchPlan(plan) {
 }
 
 function _setDefaultSun(plan) {
-  const sp = calcSunPos(plan === 'A' ? 1.0 : 9.5);
+  const sp = calcSunPos(plan === 'A' ? 9.5 : 1.0);
   sunAltTarget = sp.altitude;
   sunAzTarget  = sp.azimuth;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VIEWING MODE  (collapse panel to see Mt. Fuji)
+   ═══════════════════════════════════════════════════════════════ */
+
+function toggleViewMode() {
+  viewMode = !viewMode;
+  document.body.classList.toggle('view-mode', viewMode);
+  const label = document.getElementById('grip-label');
+  if (label) label.textContent = viewMode ? '📋 パネルを開く' : '🗻 鑑賞モード';
 }
 
 /* ═══════════════════════════════════════════════════════════════
