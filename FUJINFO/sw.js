@@ -1,5 +1,5 @@
 // FUJINFO — Service Worker
-const CACHE = 'fujinfo-2026-v1';
+const CACHE = 'fujinfo-2026-v2';
 
 const SHELL = [
   './',
