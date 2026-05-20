@@ -46,6 +46,14 @@ function lat2wz(lat) {
   return py / DH * WORLD - WORLD * 0.5;
 }
 
+// ワールドXZ座標 → 経緯度 (逆変換)
+function wx2lon(wx) { return (wx + WORLD * 0.5) / WORLD * (lonMax - lonMin) + lonMin; }
+function wz2lat(wz) {
+  const py = (wz + WORLD * 0.5) / WORLD * DH;
+  const m  = mercMax - (mercMax - mercMin) * (py / DH);
+  return Math.atan(Math.sinh(m)) * 180 / Math.PI;
+}
+
 // 経緯度 → ハイトマップピクセル座標
 function lon2px(lon) { return (lon - lonMin) / (lonMax - lonMin) * DW; }
 function lat2py(lat) { return (mercMax - _mercY(lat)) / (mercMax - mercMin) * DH; }
@@ -54,7 +62,9 @@ function lat2py(lat) { return (mercMax - _mercY(lat)) / (mercMax - mercMin) * DH
    ROUTE DATA  (経緯度座標による登山ルート定義)
 ═══════════════════════════════════════════════════════════════ */
 
-const SUMMIT = { lat: 35.3606, lon: 138.7274 };
+const SUMMIT_SW = { lat: 35.3606, lon: 138.7274 }; // 剣ヶ峰 3,776m（富士宮・御殿場ルート最高点）
+const SUMMIT_NE = { lat: 35.3634, lon: 138.7308 }; // 久須志神社 3,710m（吉田・須走ルート火口縁）
+const SUMMIT    = SUMMIT_SW;                         // buildSummitMarker で使用（主峰マーカー）
 
 // 各ルートのウェイポイントは緯度・経度で指定
 // 座標は国土地理院地形図・GPS実測データに基づく精細値
@@ -63,59 +73,72 @@ const ROUTES = [
   {
     id: 'yoshida', name: '吉田ルート',
     color: 0x44bbff, css: '#44bbff',
-    trailLat: 35.3760, trailLon: 138.7243,
+    trailLat: 35.3971, trailLon: 138.7232,
     diff: '★★★☆☆', up: '5〜7時間', down: '3〜4時間',
-    access: '河口湖駅・富士山駅からシャトルバス（約50分）',
-    note: '最も登山者が多いルート。山小屋・トイレが充実し初心者にも安心。8合目から須走ルートと合流。',
+    access: '富士山駅・河口湖駅からシャトルバス（約50分）',
+    note: '最も登山者が多いルート。山小屋・トイレが充実し初心者にも安心。8.5合目で須走ルートと合流。',
     wps: [
-      { lat: 35.3760, lon: 138.7243, name: '5合目', sub: '2,305m' },
-      { lat: 35.3739, lon: 138.7248, name: '6合目', sub: '2,390m' },
-      { lat: 35.3718, lon: 138.7253, name: '6合目 安全指導センター', sub: '2,450m' },
-      { lat: 35.3693, lon: 138.7258, name: '7合目 花小屋', sub: '2,700m' },
-      { lat: 35.3671, lon: 138.7262, name: '7合目5', sub: '2,900m' },
-      { lat: 35.3651, lon: 138.7265, name: '8合目 太子館', sub: '3,100m' },
-      { lat: 35.3636, lon: 138.7267, name: '8合目5 御来光館', sub: '3,400m' },
-      { lat: 35.3623, lon: 138.7269, name: '9合目', sub: '3,600m' },
-      { lat: 35.3613, lon: 138.7271, name: '9合目5', sub: '3,700m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 久須志神社', sub: '3,776m' },
+      { lat: 35.3971, lon: 138.7232, name: '5合目 富士スバルライン', sub: '2,305m' },
+      { lat: 35.3935, lon: 138.7236, name: '5合目5', sub: '2,380m' },
+      { lat: 35.3897, lon: 138.7241, name: '6合目 安全指導センター', sub: '2,390m' },
+      { lat: 35.3862, lon: 138.7246, name: '6合目5', sub: '2,490m' },
+      { lat: 35.3829, lon: 138.7250, name: '6合目5 雲上閣', sub: '2,540m' },
+      { lat: 35.3797, lon: 138.7254, name: '7合目 花小屋', sub: '2,700m' },
+      { lat: 35.3769, lon: 138.7257, name: '7合目 日の出館', sub: '2,720m' },
+      { lat: 35.3742, lon: 138.7260, name: '7合目5 東洋館', sub: '2,920m' },
+      { lat: 35.3716, lon: 138.7263, name: '8合目 太子館', sub: '3,100m' },
+      { lat: 35.3691, lon: 138.7266, name: '8合目 蓬莱館', sub: '3,250m' },
+      { lat: 35.3667, lon: 138.7268, name: '8合目 御来光館', sub: '3,400m' },
+      { lat: 35.3649, lon: 138.7270, name: '8合目5 白雲荘', sub: '3,450m' },
+      { lat: 35.3636, lon: 138.7275, name: '9合目 迎久須志神社', sub: '3,600m' },
+      { lat: 35.3628, lon: 138.7288, name: '9合目5', sub: '3,700m' },
+      { lat: SUMMIT_NE.lat, lon: SUMMIT_NE.lon, name: '山頂 久須志神社', sub: '3,710m' },
     ],
   },
   {
     id: 'subashiri', name: '須走ルート',
     color: 0x22dd88, css: '#22dd88',
-    trailLat: 35.3168, trailLon: 138.7785,
+    trailLat: 35.3146, trailLon: 138.7793,
     diff: '★★★☆☆', up: '5〜8時間', down: '3〜4時間',
-    access: '御殿場駅からシャトルバス（約45分）',
-    note: '樹林帯が長く自然豊か。8合目から吉田ルートと合流。砂走りが爽快。',
+    access: '御殿場駅・駿河小山駅からシャトルバス（約45分）',
+    note: '樹林帯が長く自然豊か。8.5合目で吉田ルートと合流。砂走りが爽快。',
     wps: [
-      { lat: 35.3168, lon: 138.7785, name: '5合目', sub: '1,970m' },
-      { lat: 35.3237, lon: 138.7742, name: '6合目 長田山荘', sub: '2,420m' },
-      { lat: 35.3322, lon: 138.7679, name: '7合目 大陽館', sub: '2,700m' },
-      { lat: 35.3406, lon: 138.7580, name: '7合目5 見晴館', sub: '2,900m' },
-      { lat: 35.3466, lon: 138.7479, name: '8合目 江戸屋', sub: '3,100m' },
-      { lat: 35.3544, lon: 138.7382, name: '合流点(8合目)', sub: '3,200m' },
-      { lat: 35.3577, lon: 138.7344, name: '9合目', sub: '3,400m' },
-      { lat: 35.3594, lon: 138.7308, name: '9合目5', sub: '3,560m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 久須志神社', sub: '3,776m' },
+      { lat: 35.3146, lon: 138.7793, name: '5合目', sub: '1,970m' },
+      { lat: 35.3201, lon: 138.7755, name: '5合目5', sub: '2,100m' },
+      { lat: 35.3265, lon: 138.7715, name: '6合目 長田山荘', sub: '2,420m' },
+      { lat: 35.3327, lon: 138.7662, name: '6合目5', sub: '2,550m' },
+      { lat: 35.3393, lon: 138.7600, name: '7合目 大陽館', sub: '2,700m' },
+      { lat: 35.3450, lon: 138.7540, name: '7合目5 見晴館', sub: '2,900m' },
+      { lat: 35.3503, lon: 138.7472, name: '8合目 江戸屋', sub: '3,100m' },
+      { lat: 35.3538, lon: 138.7418, name: '8合目5 下江戸屋', sub: '3,200m' },
+      { lat: 35.3563, lon: 138.7368, name: '合流点(8.5合目)', sub: '3,300m' },
+      { lat: 35.3585, lon: 138.7336, name: '9合目', sub: '3,400m' },
+      { lat: 35.3606, lon: 138.7317, name: '9合目5', sub: '3,600m' },
+      { lat: 35.3621, lon: 138.7308, name: '9合目7', sub: '3,680m' },
+      { lat: SUMMIT_NE.lat, lon: SUMMIT_NE.lon, name: '山頂 久須志神社', sub: '3,710m' },
     ],
   },
   {
     id: 'gotemba', name: '御殿場ルート',
     color: 0xffaa22, css: '#ffaa22',
-    trailLat: 35.2943, trailLon: 138.7610,
+    trailLat: 35.2879, trailLon: 138.7620,
     diff: '★★★★★', up: '7〜10時間', down: '3〜4時間',
     access: '御殿場駅からシャトルバス（約40分）',
     note: '最も標高差が大きく難易度高め。静かで空いている穴場ルート。大砂走りが名物。',
     wps: [
-      { lat: 35.2943, lon: 138.7610, name: '新5合目', sub: '1,440m' },
-      { lat: 35.3003, lon: 138.7575, name: '大石茶屋', sub: '1,510m' },
-      { lat: 35.3078, lon: 138.7527, name: '6合目', sub: '2,000m' },
-      { lat: 35.3163, lon: 138.7469, name: '7合目 日の出館', sub: '2,590m' },
-      { lat: 35.3266, lon: 138.7405, name: '8合目 赤岩八合館', sub: '3,000m' },
-      { lat: 35.3371, lon: 138.7354, name: '8合目5', sub: '3,440m' },
-      { lat: 35.3461, lon: 138.7316, name: '9合目', sub: '3,600m' },
-      { lat: 35.3533, lon: 138.7294, name: '9合目5', sub: '3,700m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 剣ヶ峰', sub: '3,776m' },
+      { lat: 35.2879, lon: 138.7620, name: '新5合目', sub: '1,440m' },
+      { lat: 35.2949, lon: 138.7580, name: '大石茶屋', sub: '1,500m' },
+      { lat: 35.3034, lon: 138.7527, name: '6合目', sub: '2,000m' },
+      { lat: 35.3112, lon: 138.7481, name: '6合目5', sub: '2,200m' },
+      { lat: 35.3193, lon: 138.7439, name: '7合目 日の出館', sub: '2,590m' },
+      { lat: 35.3254, lon: 138.7410, name: '7合目 わらじ館', sub: '2,690m' },
+      { lat: 35.3311, lon: 138.7382, name: '7合目5 砂走館', sub: '2,780m' },
+      { lat: 35.3369, lon: 138.7357, name: '8合目 赤岩八合館', sub: '3,000m' },
+      { lat: 35.3422, lon: 138.7335, name: '8合目5', sub: '3,440m' },
+      { lat: 35.3474, lon: 138.7315, name: '9合目', sub: '3,600m' },
+      { lat: 35.3522, lon: 138.7299, name: '9合目5', sub: '3,700m' },
+      { lat: 35.3560, lon: 138.7286, name: '山頂手前', sub: '3,740m' },
+      { lat: SUMMIT_SW.lat, lon: SUMMIT_SW.lon, name: '山頂 剣ヶ峰', sub: '3,776m' },
     ],
   },
   {
@@ -127,16 +150,20 @@ const ROUTES = [
     note: '5合目の標高が最も高く最短ルート。富士山本宮浅間大社奥宮を経由する。',
     wps: [
       { lat: 35.3296, lon: 138.7204, name: '5合目', sub: '2,380m' },
-      { lat: 35.3323, lon: 138.7218, name: '6合目', sub: '2,490m' },
-      { lat: 35.3342, lon: 138.7225, name: '6合目5 雲海荘', sub: '2,600m' },
-      { lat: 35.3373, lon: 138.7236, name: '7合目 御来光山荘', sub: '2,900m' },
-      { lat: 35.3403, lon: 138.7244, name: '7合目5 山口山荘', sub: '3,010m' },
-      { lat: 35.3431, lon: 138.7251, name: '8合目 池田館', sub: '3,250m' },
-      { lat: 35.3460, lon: 138.7256, name: '8合目5', sub: '3,360m' },
-      { lat: 35.3496, lon: 138.7263, name: '9合目 万年雪山荘', sub: '3,460m' },
-      { lat: 35.3551, lon: 138.7269, name: '9合目5 胸突山荘', sub: '3,590m' },
-      { lat: 35.3580, lon: 138.7272, name: '浅間大社奥宮', sub: '3,720m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 剣ヶ峰', sub: '3,776m' },
+      { lat: 35.3311, lon: 138.7210, name: '5合目5', sub: '2,440m' },
+      { lat: 35.3323, lon: 138.7216, name: '6合目', sub: '2,490m' },
+      { lat: 35.3339, lon: 138.7222, name: '6合目5 雲海荘', sub: '2,600m' },
+      { lat: 35.3358, lon: 138.7229, name: '7合目 御来光山荘', sub: '2,780m' },
+      { lat: 35.3379, lon: 138.7234, name: '7合目 宝永山荘', sub: '2,900m' },
+      { lat: 35.3402, lon: 138.7240, name: '7合目5 山口山荘', sub: '3,010m' },
+      { lat: 35.3426, lon: 138.7246, name: '8合目 池田館', sub: '3,250m' },
+      { lat: 35.3451, lon: 138.7251, name: '8合目5 上池田館', sub: '3,360m' },
+      { lat: 35.3482, lon: 138.7257, name: '9合目 万年雪山荘', sub: '3,460m' },
+      { lat: 35.3522, lon: 138.7262, name: '9合目5', sub: '3,540m' },
+      { lat: 35.3552, lon: 138.7268, name: '9合目7 胸突山荘', sub: '3,590m' },
+      { lat: 35.3572, lon: 138.7271, name: '富士山奥宮入口', sub: '3,710m' },
+      { lat: 35.3582, lon: 138.7272, name: '富士山本宮浅間大社奥宮', sub: '3,720m' },
+      { lat: SUMMIT_SW.lat, lon: SUMMIT_SW.lon, name: '山頂 剣ヶ峰', sub: '3,776m' },
     ],
   },
 ];
@@ -262,6 +289,11 @@ async function loadPhotoCanvas() {
 let renderer, scene, camera, clock;
 const routeObjects = {};   // id → { allMats: THREE.Material[] }
 
+// 地形メッシュ（ポインタ座標取得用）
+let terrainMesh = null;
+const raycaster  = new THREE.Raycaster();
+const _mouseNDC  = new THREE.Vector2();
+
 // カメラオービット（起動後にDEMロード完了後に山頂基準で更新）
 let orbitTheta  =  0.45;
 let orbitPhi    =  0.82;
@@ -347,7 +379,9 @@ function buildTerrain(heights, photoCanvas) {
     metalness: 0.0,
   });
 
-  scene.add(new THREE.Mesh(geo, mat));
+  const mesh = new THREE.Mesh(geo, mat);
+  terrainMesh = mesh;
+  scene.add(mesh);
 }
 
 // DEMからルートを地表面に投影して描画（ウェイポイント経由の精細パス）
@@ -404,9 +438,9 @@ function buildAxes() {
 }
 
 function buildSummitMarker() {
-  const summitPos = geo3(SUMMIT.lat, SUMMIT.lon, 0.06);
+  // 剣ヶ峰（最高点）: 金色大球 + リング
+  const summitPos = geo3(SUMMIT_SW.lat, SUMMIT_SW.lon, 0.06);
 
-  // 金色球マーカー
   const sphere = new THREE.Mesh(
     new THREE.SphereGeometry(0.040, 12, 12),
     new THREE.MeshBasicMaterial({ color: 0xffd700 })
@@ -414,13 +448,21 @@ function buildSummitMarker() {
   sphere.position.copy(summitPos);
   scene.add(sphere);
 
-  // 金色リング
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(0.10, 0.007, 6, 32),
     new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.55 })
   );
   ring.position.copy(summitPos);
   scene.add(ring);
+
+  // 久須志神社（吉田・須走 火口縁）: 小マーカー
+  const nePos  = geo3(SUMMIT_NE.lat, SUMMIT_NE.lon, 0.05);
+  const sphere2 = new THREE.Mesh(
+    new THREE.SphereGeometry(0.025, 10, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffd700 })
+  );
+  sphere2.position.copy(nePos);
+  scene.add(sphere2);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -448,6 +490,8 @@ function setupControls() {
     pointerX = e.clientX; pointerY = e.clientY;
     applyOrbit();
   });
+  // coordinate display on mouse hover (desktop)
+  el.addEventListener('mousemove', e => { onPointerMove(e.clientX, e.clientY); });
   window.addEventListener('mouseup', () => { pointerDown = false; });
   el.addEventListener('wheel', e => {
     orbitRadius = clamp(orbitRadius + e.deltaY * 0.008, 3, 22);
@@ -478,6 +522,8 @@ function setupControls() {
       orbitPhi    = clamp(orbitPhi - (e.touches[0].clientY - pointerY) * 0.004, 0.15, Math.PI * 0.47);
       pointerX = e.touches[0].clientX; pointerY = e.touches[0].clientY;
       applyOrbit();
+      // coordinate display on touch (mobile)
+      onPointerMove(e.touches[0].clientX, e.touches[0].clientY);
     } else if (e.touches.length === 2) {
       const dx   = e.touches[0].clientX - e.touches[1].clientX;
       const dy   = e.touches[0].clientY - e.touches[1].clientY;
@@ -589,6 +635,35 @@ function updateLabels() {
     el.style.transform = 'translate(-50%, -50%)';
     el.style.opacity   = (activeRoute === 'all' || activeRoute === r.id) ? '1' : '0.15';
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COORDINATE DISPLAY  (bottom-right XYZ readout)
+═══════════════════════════════════════════════════════════════ */
+
+function updateCoordDisplay(pt) {
+  const xEl = document.getElementById('cd-x');
+  const yEl = document.getElementById('cd-y');
+  const zEl = document.getElementById('cd-z');
+  if (!xEl || !yEl || !zEl) return;
+  if (!pt) {
+    xEl.textContent = '——';
+    yEl.textContent = '——';
+    zEl.textContent = '——';
+    return;
+  }
+  xEl.textContent = pt.x.toFixed(2);
+  yEl.textContent = Math.round(pt.y / HSCALE) + 'm';
+  zEl.textContent = pt.z.toFixed(2);
+}
+
+function onPointerMove(clientX, clientY) {
+  if (!terrainMesh) return;
+  _mouseNDC.x = (clientX / window.innerWidth)  *  2 - 1;
+  _mouseNDC.y = (clientY / window.innerHeight) * -2 + 1;
+  raycaster.setFromCamera(_mouseNDC, camera);
+  const hits = raycaster.intersectObject(terrainMesh);
+  updateCoordDisplay(hits.length > 0 ? hits[0].point : null);
 }
 
 /* ═══════════════════════════════════════════════════════════════
