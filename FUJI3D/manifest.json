@@ -1,0 +1,14 @@
+{
+  "name": "富士山 3D ルート",
+  "short_name": "富士山3D",
+  "description": "富士山 代表4登山ルート 3D可視化 — iOS PWA",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a1628",
+  "theme_color": "#0a1628",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

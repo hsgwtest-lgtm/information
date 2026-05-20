@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="富士山3D">
+  <meta name="theme-color" content="#0a1628">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+  <title>富士山 3D ルート</title>
+</head>
+<body>
+
+  <!-- Three.js canvas (full-screen) -->
+  <canvas id="canvas"></canvas>
+
+  <!-- Route trailhead labels (positioned by JS) -->
+  <div id="labels" aria-hidden="true">
+    <div id="label-yoshida"    class="route-label" style="--rc:#44bbff">吉田<br><small>2,305m</small></div>
+    <div id="label-subashiri"  class="route-label" style="--rc:#22dd88">須走<br><small>1,970m</small></div>
+    <div id="label-gotemba"    class="route-label" style="--rc:#ffaa22">御殿場<br><small>1,440m</small></div>
+    <div id="label-fujinomiya" class="route-label" style="--rc:#ff4488">富士宮<br><small>2,380m</small></div>
+  </div>
+
+  <!-- UI overlay -->
+  <div id="ui">
+    <header id="header">
+      <h1>🗻 富士山 登山ルート</h1>
+      <p>代表4ルート 3D可視化 &nbsp;|&nbsp; ドラッグで回転・ピンチでズーム</p>
+    </header>
+
+    <div id="bottom-ui">
+      <!-- Route selector -->
+      <div id="route-selector">
+        <button class="route-btn active" data-id="all"        onclick="selectRoute('all')">全ルート</button>
+        <button class="route-btn" data-id="yoshida"     onclick="selectRoute('yoshida')"    style="--rc:#44bbff">吉田</button>
+        <button class="route-btn" data-id="subashiri"   onclick="selectRoute('subashiri')"  style="--rc:#22dd88">須走</button>
+        <button class="route-btn" data-id="gotemba"     onclick="selectRoute('gotemba')"    style="--rc:#ffaa22">御殿場</button>
+        <button class="route-btn" data-id="fujinomiya"  onclick="selectRoute('fujinomiya')" style="--rc:#ff4488">富士宮</button>
+      </div>
+
+      <!-- Route info panel (hidden until a route is selected) -->
+      <div id="info-panel" class="hidden">
+        <div id="info-head">
+          <span id="info-dot"></span>
+          <h2 id="info-name"></h2>
+          <span id="info-diff"></span>
+        </div>
+        <div id="info-grid">
+          <div class="ig-row"><span class="ig-label">登り</span><span id="info-up"></span></div>
+          <div class="ig-row"><span class="ig-label">下り</span><span id="info-down"></span></div>
+          <div class="ig-row full"><span class="ig-label">アクセス</span><span id="info-access"></span></div>
+          <div class="ig-row full"><span class="ig-label">特徴</span><span id="info-note"></span></div>
+        </div>
+        <div id="info-wps"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading screen -->
+  <div id="loading">
+    <div id="ld-icon">🗻</div>
+    <div id="ld-bar"><div id="ld-fill"></div></div>
+    <p id="ld-text">富士山を描画中…</p>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+/* ─── Reset & Base ─── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:     #0a1628;
+  --glass:  rgba(8, 20, 48, 0.82);
+  --glass-b:rgba(255, 255, 255, 0.10);
+  --text:   rgba(255, 255, 255, 0.92);
+  --muted:  rgba(255, 255, 255, 0.45);
+  --safe-t: env(safe-area-inset-top,    0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Hiragino Sans', 'Yu Gothic UI', 'Helvetica Neue', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ─── Canvas ─── */
+#canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ─── Route labels (3D → screen) ─── */
+#labels {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.route-label {
+  position: absolute;
+  top: 0; left: 0;
+  padding: 4px 9px;
+  background: rgba(0, 0, 0, 0.60);
+  border: 1.5px solid var(--rc, #fff);
+  border-radius: 8px;
+  color: var(--rc, #fff);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  display: none;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  transition: opacity 0.25s;
+}
+.route-label small { font-weight: 400; font-size: 10px; }
+
+/* ─── UI overlay ─── */
+#ui {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+#ui > * { pointer-events: auto; }
+
+/* ─── Header ─── */
+#header {
+  padding: calc(var(--safe-t) + 10px) 16px 12px;
+  background: linear-gradient(to bottom, rgba(8, 20, 48, 0.88) 65%, transparent);
+  pointer-events: none;
+}
+#header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+#header p {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ─── Bottom UI ─── */
+#bottom-ui {
+  margin-top: auto;
+  background: linear-gradient(to top, rgba(8, 20, 48, 0.92) 55%, transparent);
+  padding-bottom: calc(var(--safe-b) + 8px);
+}
+
+/* ─── Route selector ─── */
+#route-selector {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+#route-selector::-webkit-scrollbar { display: none; }
+
+.route-btn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: 22px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  -webkit-appearance: none;
+}
+.route-btn.active {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+/* ─── Info panel ─── */
+#info-panel {
+  margin: 0 12px 6px;
+  padding: 12px 14px;
+  background: var(--glass);
+  border: 1px solid var(--glass-b);
+  border-radius: 16px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  max-height: 50vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  transition: opacity 0.2s;
+}
+#info-panel.hidden { display: none; }
+
+#info-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+#info-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+#info-head h2 {
+  font-size: 15px;
+  font-weight: 700;
+  flex: 1;
+}
+#info-diff {
+  font-size: 12px;
+  color: #ffcc44;
+  flex-shrink: 0;
+}
+
+#info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.ig-row { display: flex; flex-direction: column; gap: 2px; }
+.ig-row.full { grid-column: 1 / -1; }
+.ig-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ─── Waypoint chips ─── */
+#info-wps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wp-chip {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.wp-chip span {
+  color: var(--muted);
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+/* ─── Loading screen ─── */
+#loading {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  transition: opacity 0.5s;
+}
+#ld-icon {
+  font-size: 64px;
+  animation: fuji-pulse 1.2s ease-in-out infinite;
+}
+@keyframes fuji-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%       { transform: scale(1.08); opacity: 0.8; }
+}
+#ld-bar {
+  width: 160px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+#ld-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(to right, #44bbff, #22dd88);
+  border-radius: 2px;
+  transition: width 0.25s ease;
+}
+#ld-text {
+  font-size: 13px;
+  color: var(--muted);
+}
