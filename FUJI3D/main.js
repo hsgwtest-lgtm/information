@@ -513,8 +513,8 @@ function animate() {
   if (targetTheta !== null) {
     // Smooth rotation toward selected route
     let diff = targetTheta - orbitTheta;
-    // Normalise to [-π, π]
-    diff = ((diff + Math.PI) % (Math.PI * 2)) - Math.PI;
+    // Normalise to [-π, π] — handles negative values correctly
+    diff = ((diff + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
     orbitTheta += diff * Math.min(dt * 2.8, 0.9);
     applyOrbit();
     if (Math.abs(diff) < 0.015) {
@@ -578,11 +578,13 @@ function init() {
   setupControls();
   window.addEventListener('resize', onResize);
 
-  // Animate loading bar then reveal scene
+  // Animate loading bar (simulated — capped at LOADING_CAP% until render starts)
+  const LOADING_STEP = 22;   // max random increment per tick
+  const LOADING_CAP  = 88;   // hold here until first frame is rendered
   const ldFill = document.getElementById('ld-fill');
   let prog = 0;
   const iv = setInterval(() => {
-    prog = Math.min(prog + Math.random() * 22, 88);
+    prog = Math.min(prog + Math.random() * LOADING_STEP, LOADING_CAP);
     ldFill.style.width = prog + '%';
   }, 60);
 
