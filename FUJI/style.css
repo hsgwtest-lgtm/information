@@ -526,3 +526,38 @@ footer {
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+/* ─── Timeline playback ─── */
+.timeline-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.play-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 212, 255, 0.4);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--col-a);
+  font-size: 0.88rem;
+  cursor: pointer;
+  -webkit-appearance: none;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.play-btn:active {
+  background: rgba(0, 212, 255, 0.18);
+}
+body.plan-b .play-btn {
+  border-color: rgba(255, 170, 51, 0.4);
+  background: rgba(255, 170, 51, 0.08);
+  color: var(--col-b);
+}
+body.plan-b .play-btn:active {
+  background: rgba(255, 170, 51, 0.18);
+}
