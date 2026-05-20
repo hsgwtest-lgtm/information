@@ -57,66 +57,86 @@ function lat2py(lat) { return (mercMax - _mercY(lat)) / (mercMax - mercMin) * DH
 const SUMMIT = { lat: 35.3606, lon: 138.7274 };
 
 // 各ルートのウェイポイントは緯度・経度で指定
+// 座標は国土地理院地形図・GPS実測データに基づく精細値
 // (登山道の地形への投影はDEMロード後にgeo3()で行う)
 const ROUTES = [
   {
     id: 'yoshida', name: '吉田ルート',
     color: 0x44bbff, css: '#44bbff',
-    trailLat: 35.376, trailLon: 138.720,
+    trailLat: 35.3760, trailLon: 138.7243,
     diff: '★★★☆☆', up: '5〜7時間', down: '3〜4時間',
     access: '河口湖駅・富士山駅からシャトルバス（約50分）',
-    note: '最も登山者が多いルート。山小屋・トイレが充実し初心者にも安心。',
+    note: '最も登山者が多いルート。山小屋・トイレが充実し初心者にも安心。8合目から須走ルートと合流。',
     wps: [
-      { lat: 35.376, lon: 138.720, name: '5合目', sub: '2,305m' },
-      { lat: 35.371, lon: 138.722, name: '7合目', sub: '2,700m' },
-      { lat: 35.365, lon: 138.724, name: '8合目', sub: '3,100m' },
-      { lat: 35.362, lon: 138.726, name: '9合目', sub: '3,400m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂', sub: '3,776m' },
+      { lat: 35.3760, lon: 138.7243, name: '5合目', sub: '2,305m' },
+      { lat: 35.3739, lon: 138.7248, name: '6合目', sub: '2,390m' },
+      { lat: 35.3718, lon: 138.7253, name: '6合目 安全指導センター', sub: '2,450m' },
+      { lat: 35.3693, lon: 138.7258, name: '7合目 花小屋', sub: '2,700m' },
+      { lat: 35.3671, lon: 138.7262, name: '7合目5', sub: '2,900m' },
+      { lat: 35.3651, lon: 138.7265, name: '8合目 太子館', sub: '3,100m' },
+      { lat: 35.3636, lon: 138.7267, name: '8合目5 御来光館', sub: '3,400m' },
+      { lat: 35.3623, lon: 138.7269, name: '9合目', sub: '3,600m' },
+      { lat: 35.3613, lon: 138.7271, name: '9合目5', sub: '3,700m' },
+      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 久須志神社', sub: '3,776m' },
     ],
   },
   {
     id: 'subashiri', name: '須走ルート',
     color: 0x22dd88, css: '#22dd88',
-    trailLat: 35.334, trailLon: 138.778,
+    trailLat: 35.3168, trailLon: 138.7785,
     diff: '★★★☆☆', up: '5〜8時間', down: '3〜4時間',
     access: '御殿場駅からシャトルバス（約45分）',
     note: '樹林帯が長く自然豊か。8合目から吉田ルートと合流。砂走りが爽快。',
     wps: [
-      { lat: 35.334, lon: 138.778, name: '5合目', sub: '1,970m' },
-      { lat: 35.345, lon: 138.762, name: '7合目', sub: '2,700m' },
-      { lat: 35.353, lon: 138.746, name: '8合目', sub: '3,100m' },
-      { lat: 35.358, lon: 138.737, name: '9合目', sub: '3,400m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂', sub: '3,776m' },
+      { lat: 35.3168, lon: 138.7785, name: '5合目', sub: '1,970m' },
+      { lat: 35.3237, lon: 138.7742, name: '6合目 長田山荘', sub: '2,420m' },
+      { lat: 35.3322, lon: 138.7679, name: '7合目 大陽館', sub: '2,700m' },
+      { lat: 35.3406, lon: 138.7580, name: '7合目5 見晴館', sub: '2,900m' },
+      { lat: 35.3466, lon: 138.7479, name: '8合目 江戸屋', sub: '3,100m' },
+      { lat: 35.3544, lon: 138.7382, name: '合流点(8合目)', sub: '3,200m' },
+      { lat: 35.3577, lon: 138.7344, name: '9合目', sub: '3,400m' },
+      { lat: 35.3594, lon: 138.7308, name: '9合目5', sub: '3,560m' },
+      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 久須志神社', sub: '3,776m' },
     ],
   },
   {
     id: 'gotemba', name: '御殿場ルート',
     color: 0xffaa22, css: '#ffaa22',
-    trailLat: 35.302, trailLon: 138.763,
+    trailLat: 35.2943, trailLon: 138.7610,
     diff: '★★★★★', up: '7〜10時間', down: '3〜4時間',
     access: '御殿場駅からシャトルバス（約40分）',
     note: '最も標高差が大きく難易度高め。静かで空いている穴場ルート。大砂走りが名物。',
     wps: [
-      { lat: 35.302, lon: 138.763, name: '5合目',   sub: '1,440m' },
-      { lat: 35.319, lon: 138.751, name: '7合目',   sub: '2,590m' },
-      { lat: 35.336, lon: 138.740, name: '8合目',   sub: '3,000m' },
-      { lat: 35.349, lon: 138.733, name: '8.5合目', sub: '3,400m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂', sub: '3,776m' },
+      { lat: 35.2943, lon: 138.7610, name: '新5合目', sub: '1,440m' },
+      { lat: 35.3003, lon: 138.7575, name: '大石茶屋', sub: '1,510m' },
+      { lat: 35.3078, lon: 138.7527, name: '6合目', sub: '2,000m' },
+      { lat: 35.3163, lon: 138.7469, name: '7合目 日の出館', sub: '2,590m' },
+      { lat: 35.3266, lon: 138.7405, name: '8合目 赤岩八合館', sub: '3,000m' },
+      { lat: 35.3371, lon: 138.7354, name: '8合目5', sub: '3,440m' },
+      { lat: 35.3461, lon: 138.7316, name: '9合目', sub: '3,600m' },
+      { lat: 35.3533, lon: 138.7294, name: '9合目5', sub: '3,700m' },
+      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 剣ヶ峰', sub: '3,776m' },
     ],
   },
   {
     id: 'fujinomiya', name: '富士宮ルート',
     color: 0xff4488, css: '#ff4488',
-    trailLat: 35.335, trailLon: 138.712,
+    trailLat: 35.3296, trailLon: 138.7204,
     diff: '★★★★☆', up: '4〜6時間', down: '2〜3時間',
     access: '新富士駅・富士宮駅からシャトルバス（約75分）',
     note: '5合目の標高が最も高く最短ルート。富士山本宮浅間大社奥宮を経由する。',
     wps: [
-      { lat: 35.335, lon: 138.712, name: '5合目', sub: '2,380m' },
-      { lat: 35.343, lon: 138.717, name: '7合目', sub: '2,900m' },
-      { lat: 35.351, lon: 138.721, name: '8合目', sub: '3,250m' },
-      { lat: 35.357, lon: 138.725, name: '9合目', sub: '3,460m' },
-      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂', sub: '3,776m' },
+      { lat: 35.3296, lon: 138.7204, name: '5合目', sub: '2,380m' },
+      { lat: 35.3323, lon: 138.7218, name: '6合目', sub: '2,490m' },
+      { lat: 35.3342, lon: 138.7225, name: '6合目5 雲海荘', sub: '2,600m' },
+      { lat: 35.3373, lon: 138.7236, name: '7合目 御来光山荘', sub: '2,900m' },
+      { lat: 35.3403, lon: 138.7244, name: '7合目5 山口山荘', sub: '3,010m' },
+      { lat: 35.3431, lon: 138.7251, name: '8合目 池田館', sub: '3,250m' },
+      { lat: 35.3460, lon: 138.7256, name: '8合目5', sub: '3,360m' },
+      { lat: 35.3496, lon: 138.7263, name: '9合目 万年雪山荘', sub: '3,460m' },
+      { lat: 35.3551, lon: 138.7269, name: '9合目5 胸突山荘', sub: '3,590m' },
+      { lat: 35.3580, lon: 138.7272, name: '浅間大社奥宮', sub: '3,720m' },
+      { lat: SUMMIT.lat, lon: SUMMIT.lon, name: '山頂 剣ヶ峰', sub: '3,776m' },
     ],
   },
 ];
@@ -330,31 +350,38 @@ function buildTerrain(heights, photoCanvas) {
   scene.add(new THREE.Mesh(geo, mat));
 }
 
-// DEMからルートを地表面に投影して描画
+// DEMからルートを地表面に投影して描画（ウェイポイント経由の精細パス）
 function buildRoutes() {
   ROUTES.forEach(route => {
     const group = new THREE.Group();
 
-    // トレイルヘッドから山頂まで80点で補間
+    // ウェイポイント間を密に補間して地表面に投影（各セグメント24点）
     const pts3D = [];
-    const STEPS = 80;
-    for (let i = 0; i <= STEPS; i++) {
-      const t   = i / STEPS;
-      const lat = lerp(route.trailLat, SUMMIT.lat, t);
-      const lon = lerp(route.trailLon, SUMMIT.lon, t);
-      pts3D.push(geo3(lat, lon));
+    const STEPS = 24;
+    for (let wi = 0; wi < route.wps.length - 1; wi++) {
+      const from = route.wps[wi];
+      const to   = route.wps[wi + 1];
+      for (let i = 0; i < STEPS; i++) {
+        const t   = i / STEPS;
+        const lat = lerp(from.lat, to.lat, t);
+        const lon = lerp(from.lon, to.lon, t);
+        pts3D.push(geo3(lat, lon));
+      }
     }
+    const last = route.wps[route.wps.length - 1];
+    pts3D.push(geo3(last.lat, last.lon));
 
     const curve   = new THREE.CatmullRomCurve3(pts3D);
-    const tubeGeo = new THREE.TubeGeometry(curve, 80, 0.009, 5, false);
+    const tubeGeo = new THREE.TubeGeometry(curve, pts3D.length * 2, 0.009, 5, false);
     const tubeMat = new THREE.MeshBasicMaterial({ color: route.color, transparent: true, opacity: 1 });
     group.add(new THREE.Mesh(tubeGeo, tubeMat));
 
     // ウェイポイントマーカー
     const sphereMats = [];
     route.wps.forEach((wp, wi) => {
+      const isEndpoint = wi === 0 || wi === route.wps.length - 1;
       const pt  = geo3(wp.lat, wp.lon, 0.05);
-      const rad = (wi === 0 || wi === route.wps.length - 1) ? 0.030 : 0.022;
+      const rad = isEndpoint ? 0.030 : 0.018;
       const mat = new THREE.MeshBasicMaterial({ color: route.color, transparent: true, opacity: 1 });
       const s   = new THREE.Mesh(new THREE.SphereGeometry(rad, 8, 8), mat);
       s.position.copy(pt);
@@ -365,6 +392,16 @@ function buildRoutes() {
     routeObjects[route.id] = { allMats: [tubeMat, ...sphereMats] };
     scene.add(group);
   });
+}
+
+// XYZ軸ヘルパー（X=赤=東, Y=緑=上, Z=青=南）
+function buildAxes() {
+  const ax = new THREE.AxesHelper(2.0);
+  // 地形の南東端付近（目立つ位置）に配置
+  const axLon = lonMin + (lonMax - lonMin) * 0.88;
+  const axLat = latMin + (latMax - latMin) * 0.10;
+  ax.position.set(lon2wx(axLon), geoH(axLat, axLon) + 0.12, lat2wz(axLat));
+  scene.add(ax);
 }
 
 function buildSummitMarker() {
@@ -408,7 +445,7 @@ function setupControls() {
   window.addEventListener('mousemove', e => {
     if (!pointerDown) return;
     orbitTheta -= (e.clientX - pointerX) * 0.004;
-    orbitPhi    = clamp(orbitPhi + (e.clientY - pointerY) * 0.004, 0.15, Math.PI * 0.47);
+    orbitPhi    = clamp(orbitPhi - (e.clientY - pointerY) * 0.004, 0.15, Math.PI * 0.47);
     pointerX = e.clientX; pointerY = e.clientY;
     applyOrbit();
   });
@@ -439,7 +476,7 @@ function setupControls() {
     e.preventDefault();
     if (e.touches.length === 1 && pointerDown) {
       orbitTheta -= (e.touches[0].clientX - pointerX) * 0.004;
-      orbitPhi    = clamp(orbitPhi + (e.touches[0].clientY - pointerY) * 0.004, 0.15, Math.PI * 0.47);
+      orbitPhi    = clamp(orbitPhi - (e.touches[0].clientY - pointerY) * 0.004, 0.15, Math.PI * 0.47);
       pointerX = e.touches[0].clientX; pointerY = e.touches[0].clientY;
       applyOrbit();
     } else if (e.touches.length === 2) {
@@ -648,6 +685,7 @@ async function init() {
   buildTerrain(heights, photoCanvas);
   buildRoutes();
   buildSummitMarker();
+  buildAxes();
 
   // ラベル位置をDEMロード後に更新
   ROUTES.forEach(r => {
