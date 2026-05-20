@@ -19,11 +19,11 @@
   --t2: rgba(255,255,255,0.54);
   --t3: rgba(255,255,255,0.30);
 
-  /* Accent — Plan A: warm amber (ご来光) */
-  --a:     #f5a623;
-  --a-lo:  rgba(245,166,35,0.10);
-  --a-md:  rgba(245,166,35,0.26);
-  --a-gw:  rgba(245,166,35,0.55);
+  /* Accent — Plan A: sky blue (昼間登山) */
+  --a:     #2196f3;
+  --a-lo:  rgba(33,150,243,0.10);
+  --a-md:  rgba(33,150,243,0.26);
+  --a-gw:  rgba(33,150,243,0.55);
 
   /* Status */
   --green:  #34c759;
@@ -44,12 +44,12 @@
 }
 
 
-/* Plan B: sky blue override */
+/* Plan B: warm amber (ご来光) */
 body.plan-b {
-  --a:    #2196f3;
-  --a-lo: rgba(33,150,243,0.10);
-  --a-md: rgba(33,150,243,0.26);
-  --a-gw: rgba(33,150,243,0.55);
+  --a:    #f5a623;
+  --a-lo: rgba(245,166,35,0.10);
+  --a-md: rgba(245,166,35,0.26);
+  --a-gw: rgba(245,166,35,0.55);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -257,6 +257,44 @@ html, body {
   border-top-right-radius: var(--r20);
   border-top: 1px solid var(--b2);
   overflow: hidden;
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Panel grip (tap to toggle viewing mode) */
+#panel-grip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px 6px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#grip-line {
+  width: 36px;
+  height: 3px;
+  background: var(--b2);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+#grip-label {
+  font-size: 10px;
+  color: var(--t3);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* Viewing mode: panel slides down, showing only grip strip */
+body.view-mode #panel {
+  transform: translateY(calc(100% - 40px));
+}
+
+body.view-mode #view-btns {
+  bottom: 54px;
 }
 
 /* ── Step info strip ───────────────────────────────────────── */
@@ -729,7 +767,7 @@ html, body {
 
 .g-tag-req { background: rgba(255,59,48,0.12); color: #ff5e55; border: 1px solid rgba(255,59,48,0.22); }
 .g-tag-a   { background: var(--a-lo);           color: var(--a); border: 1px solid var(--a-md); }
-.g-tag-b   { background: rgba(33,150,243,0.10); color: #2196f3;  border: 1px solid rgba(33,150,243,0.24); }
+.g-tag-b   { background: rgba(245,166,35,0.10); color: #f5a623;  border: 1px solid rgba(245,166,35,0.24); }
 
 body.plan-b .g-tag-a { display: none; }
 body.plan-a .g-tag-b { display: none; }
