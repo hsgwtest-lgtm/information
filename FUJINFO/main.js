@@ -369,13 +369,6 @@ function updateSunScene(alt, az) {
    DATA LOADERS  (GSI タイル, from FUJI3D)
    ═══════════════════════════════════════════════════════════════ */
 
-function setProgress(pct, msg) {
-  const fill = document.getElementById('loading-fill');
-  const text = document.getElementById('loading-text');
-  if (fill) fill.style.width = clamp(pct, 0, 100) + '%';
-  if (msg && text) text.textContent = msg;
-}
-
 async function loadDEM() {
   const buf  = new Float32Array(DW * DH);
   let   done = 0;
@@ -735,52 +728,35 @@ function updateLabels() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   HUD  (time display + altitude / conditions panel)
+   HUD  →  Step info strip
    ═══════════════════════════════════════════════════════════════ */
 
 function updateHUD(step) {
-  const timeEl = document.getElementById('hud-time');
-  const condEl = document.getElementById('hud-cond');
+  const strip = document.getElementById('step-strip');
+  if (!strip) return;
 
   if (!step) {
-    condEl.classList.remove('visible');
-    if (timeEl) timeEl.textContent = '--:--';
+    strip.classList.add('hidden');
     return;
   }
 
-  if (timeEl) timeEl.textContent = step.time;
-
-  // Elevation from YOSHIDA_WPS lookup (actual known altitudes)
-  const pos  = tToPos(step.t);
-  const altM = pos.alt;
-
-  // Temperature: step data or lapse-rate estimate (6.5℃ per 1000m)
+  const pos   = tToPos(step.t);
+  const altM  = pos.alt;
   const tempC = (step.temp && step.temp !== '↑')
     ? step.temp
     : `約${Math.round(15 - (altM - 2305) * 0.0065)}℃`;
 
-  // Wind estimate: stronger higher and at night
   const windBase = 5 + (altM - 2305) / 300;
   const windMin  = Math.round(windBase);
   const windMax  = Math.round(windBase + 5 + (sunAltCurrent < 0 ? 3 : 0));
 
-  // UV index: zero at night, scales with sun altitude and elevation
-  let uvStr;
-  if (sunAltCurrent < 0.02) {
-    uvStr = 'なし（夜間）';
-  } else {
-    const uvVal = sunAltCurrent * 12 * (1 + (altM - 2305) / 1500);
-    const uvIdx = Math.round(uvVal * 10) / 10;
-    const label = uvIdx < 3 ? '弱い' : uvIdx < 6 ? '中程度' : uvIdx < 8 ? '強い' : '非常に強い';
-    uvStr = `${uvIdx.toFixed(1)}（${label}）`;
-  }
+  document.getElementById('ss-time').textContent = step.time;
+  document.getElementById('ss-loc').textContent  = step.loc;
+  document.getElementById('ss-alt').textContent  = `📍${altM.toLocaleString()}m`;
+  document.getElementById('ss-temp').textContent = `🌡${tempC}`;
+  document.getElementById('ss-wind').textContent = `💨${windMin}〜${windMax}m/s`;
 
-  document.getElementById('hud-alt').textContent  = `${altM.toLocaleString()} m`;
-  document.getElementById('hud-temp').textContent = tempC;
-  document.getElementById('hud-wind').textContent = `${windMin}〜${windMax} m/s`;
-  document.getElementById('hud-uv').textContent   = uvStr;
-
-  condEl.classList.add('visible');
+  strip.classList.remove('hidden');
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -835,7 +811,7 @@ function animate() {
     c.children.forEach(ch => { if (ch.material) ch.material.opacity = 0.20 + dayF * 0.30; });
   });
 
-  // Sun altitude / azimuth lerp (smooth transition when timeline step changes)
+  // Sun altitude / azimuth lerp
   const sl = dt * 1.5;
   sunAltCurrent += (sunAltTarget - sunAltCurrent) * sl;
   let daz = sunAzTarget - sunAzCurrent;
@@ -850,42 +826,77 @@ function animate() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   UI BUILDERS  (from FUJI)
+   TAB NAVIGATION
    ═══════════════════════════════════════════════════════════════ */
+
+function showTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const active = btn.dataset.tab === tabName;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('.pane').forEach(pane => {
+    pane.classList.toggle('active', pane.id === 'pane-' + tabName);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PROGRESS / LOADING
+   ═══════════════════════════════════════════════════════════════ */
+
+function setProgress(pct, msg) {
+  const fill = document.getElementById('load-fill');
+  const text = document.getElementById('load-msg');
+  if (fill) fill.style.width = clamp(pct, 0, 100) + '%';
+  if (msg && text) text.textContent = msg;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UI BUILDERS
+   ═══════════════════════════════════════════════════════════════ */
+
+function _fmtDay(d) {
+  const [m, dd] = d.split('/').map(Number);
+  const dow = ['日','月','火','水','木','金','土'][new Date(2026, m - 1, dd).getDay()];
+  return `${m}月${dd}日（${dow}）`;
+}
 
 function buildTimeline() {
   const el = document.getElementById('timeline');
   el.innerHTML = '';
   const steps = PLANS[currentPlan].steps;
-  let lastDay = null;
+  let lastDay  = null;
 
   steps.forEach((s, i) => {
     if (s.day !== lastDay) {
       const sep = document.createElement('div');
-      sep.className = 'day-sep'; sep.textContent = s.day;
+      sep.className   = 'day-sep';
+      sep.textContent = _fmtDay(s.day);
       el.appendChild(sep);
       lastDay = s.day;
     }
-    const div = document.createElement('div');
-    div.className = 't-step' + (s.hl ? ' hl' : '');
-    div.dataset.idx = i;
+
     const isFirst = i === 0, isLast = i === steps.length - 1;
+    const div = document.createElement('div');
+    div.className  = 't-step' + (s.hl ? ' hl' : '');
+    div.dataset.idx = i;
+    div.setAttribute('role', 'listitem');
     div.innerHTML = `
       <div class="t-conn">
-        <div class="t-line${isFirst ? ' hide' : ''}"></div>
+        <div class="t-line${isFirst ? ' invisible' : ''}"></div>
         <div class="t-dot"></div>
-        <div class="t-line${isLast ? ' hide' : ''}"></div>
+        <div class="t-line${isLast ? ' invisible' : ''}"></div>
       </div>
       <div class="t-card">
         <div class="t-top">
-          <span class="t-time">${s.day} ${s.time}</span>
+          <span class="t-time">${s.time}</span>
           <span class="t-icon">${s.icon}</span>
           <span class="t-loc">${s.loc}</span>
         </div>
-        <div class="t-bottom">
+        ${(s.note || s.temp) ? `<div class="t-bottom">
           ${s.note ? `<span class="t-note">${s.note}</span>` : ''}
-          ${s.temp ? `<span class="t-temp">${s.temp}</span>` : ''}
-        </div>
+          ${s.temp ? `<span class="t-temp-badge">${s.temp}</span>` : ''}
+        </div>` : ''}
       </div>`;
     div.addEventListener('click', () => onStepSelect(i, s.t));
     el.appendChild(div);
@@ -893,13 +904,14 @@ function buildTimeline() {
 }
 
 function buildTemps() {
+  const plan = currentPlan;
   document.getElementById('temp-list').innerHTML = TEMPS.map(t => `
-    <div class="temp-row">
-      <span class="temp-alt">${t.alt}</span>
+    <div class="temp-item" role="listitem">
+      <span class="temp-alt-badge">${t.alt}</span>
       <span class="temp-place">${t.place}</span>
       <div class="temp-vals">
-        <div class="temp-day">${t.day}</div>
-        <div class="temp-night">${currentPlan === 'A' ? t.night : t.day}</div>
+        <span class="temp-day-v">${t.day}</span>
+        <span class="temp-night-v">${plan === 'A' ? t.night : t.day}</span>
       </div>
     </div>`).join('');
 }
@@ -910,21 +922,26 @@ function buildGear() {
   let total = 0, done = 0;
 
   GEAR.forEach(cat => {
-    const catDiv = document.createElement('div');
-    catDiv.className = 'gear-cat';
+    const group = document.createElement('div');
+    group.className = 'gear-group';
+    group.setAttribute('role', 'listitem');
+
     const head = document.createElement('div');
-    head.className = 'gear-cat-head'; head.textContent = cat.cat;
-    catDiv.appendChild(head);
+    head.className   = 'gear-group-header';
+    head.textContent = cat.cat;
+    group.appendChild(head);
 
     cat.items.forEach(item => {
       total++;
       const key     = item.name;
       const checked = checkedGear.has(key);
       if (checked) done++;
-      let badge = '';
-      if (item.req) badge = '<span class="g-badge badge-req">必須</span>';
-      else if (item.pa) badge = '<span class="g-badge badge-a badge-plan">Plan A</span>';
-      else if (item.pb) badge = '<span class="g-badge badge-b badge-plan">Plan B</span>';
+
+      let tag = '';
+      if      (item.req) tag = '<span class="g-tag g-tag-req">必須</span>';
+      else if (item.pa)  tag = '<span class="g-tag g-tag-a">Plan A</span>';
+      else if (item.pb)  tag = '<span class="g-tag g-tag-b">Plan B</span>';
+
       const row = document.createElement('div');
       row.className = 'gear-item' + (checked ? ' done' : '');
       row.innerHTML = `
@@ -933,13 +950,26 @@ function buildGear() {
           <div class="g-name">${item.name}</div>
           ${item.note ? `<div class="g-note">${item.note}</div>` : ''}
         </div>
-        ${badge}`;
+        ${tag}`;
       row.addEventListener('click', () => toggleGear(key, row));
-      catDiv.appendChild(row);
+      group.appendChild(row);
     });
-    el.appendChild(catDiv);
+    el.appendChild(group);
   });
+
   document.getElementById('gear-progress').textContent = `${done} / ${total} 完了`;
+  updateGearBadge(done);
+}
+
+function updateGearBadge(count) {
+  const badge = document.getElementById('gear-badge');
+  if (!badge) return;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.classList.add('show');
+  } else {
+    badge.classList.remove('show');
+  }
 }
 
 function toggleGear(key, row) {
@@ -953,12 +983,17 @@ function toggleGear(key, row) {
     row.querySelector('.g-check').textContent = '✓';
   }
   saveGearState();
-  const all = document.querySelectorAll('.gear-item').length;
+  const all  = document.querySelectorAll('.gear-item').length;
   const done = document.querySelectorAll('.gear-item.done').length;
   document.getElementById('gear-progress').textContent = `${done} / ${all} 完了`;
+  updateGearBadge(done);
 }
 
-function resetGear() { checkedGear.clear(); saveGearState(); buildGear(); }
+function resetGear() {
+  checkedGear.clear();
+  saveGearState();
+  buildGear();
+}
 
 /* ═══════════════════════════════════════════════════════════════
    STEP SELECTION & PLAN SWITCHING
@@ -986,6 +1021,12 @@ function onStepSelect(idx, t) {
   }
 
   document.querySelectorAll('.t-step').forEach((el, i) => el.classList.toggle('sel', i === idx));
+
+  // Scroll selected step into view within the pane
+  const stepEls = document.querySelectorAll('.t-step');
+  if (stepEls[idx]) {
+    stepEls[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 }
 
 function switchPlan(plan) {
@@ -997,9 +1038,9 @@ function switchPlan(plan) {
   document.getElementById('btn-b').classList.toggle('active', plan === 'B');
 
   const p = PLANS[plan];
-  document.getElementById('plan-card-icon').textContent  = p.icon;
-  document.getElementById('plan-card-title').textContent = p.title;
-  document.getElementById('plan-card-desc').textContent  = p.desc;
+  document.getElementById('ps-ico').textContent   = p.icon;
+  document.getElementById('ps-title').textContent = p.title;
+  document.getElementById('ps-desc').textContent  = p.desc;
 
   selectedStep  = -1;
   markerTargetT = 0.00;
@@ -1009,6 +1050,8 @@ function switchPlan(plan) {
   updateHUD(null);
   buildTimeline();
   buildTemps();
+  // Switch to timeline tab for the new plan
+  showTab('timeline');
 }
 
 function _setDefaultSun(plan) {
@@ -1025,7 +1068,8 @@ function togglePlayback() { isPlaying ? pauseTimeline() : playTimeline(); }
 
 function playTimeline() {
   isPlaying = true;
-  document.getElementById('btn-play').textContent = '⏸';
+  const btn = document.getElementById('btn-play');
+  if (btn) btn.textContent = '⏸';
   _advancePlayback();
 }
 
@@ -1040,12 +1084,7 @@ function _advancePlayback() {
   if (!isPlaying) return;
   const steps = PLANS[currentPlan].steps;
   playbackIdx = (playbackIdx + 1) % steps.length;
-  const s = steps[playbackIdx];
-  onStepSelect(playbackIdx, s.t);
-  const stepEls = document.querySelectorAll('.t-step');
-  if (stepEls[playbackIdx]) {
-    stepEls[playbackIdx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  onStepSelect(playbackIdx, steps[playbackIdx].t);
   playbackTimeout = setTimeout(_advancePlayback, 2500);
 }
 
@@ -1076,7 +1115,6 @@ async function init() {
   camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 600);
   clock  = new THREE.Clock();
 
-  // Build atmospheric elements first so they render during DEM load
   buildLights();
   buildSun();
   buildMoon();
@@ -1089,18 +1127,15 @@ async function init() {
   window.addEventListener('resize', onResize);
   animate();
 
-  // Apply initial sky (night for Plan A)
   _setDefaultSun(currentPlan);
   sunAltCurrent = sunAltTarget;
   sunAzCurrent  = sunAzTarget;
   updateSunScene(sunAltCurrent, sunAzCurrent);
 
-  // Load real terrain data asynchronously
-  setProgress(0, '富士山データを読込中…');
+  setProgress(0, 'データを読み込み中…');
   const [heights, photoCanvas] = await Promise.all([loadDEM(), loadPhotoCanvas()]);
   hmap = heights;
 
-  // Shift orbit target to real summit height after DEM is available
   orbitTarget.set(
     lon2wx(SUMMIT.lon),
     geoH(SUMMIT.lat, SUMMIT.lon) * 0.55,
@@ -1108,7 +1143,6 @@ async function init() {
   );
   applyOrbit();
 
-  // Update label heights to match DEM
   labelDefs.forEach(d => {
     labelPts[d.id] = new THREE.Vector3(lon2wx(d.lon), geoH(d.lat, d.lon) + d.dy, lat2wz(d.lat));
   });
@@ -1119,16 +1153,15 @@ async function init() {
   buildMarker();
   buildSummitMarker();
 
-  // Place marker at trailhead on real terrain
   markerMesh.position.copy(geo3(TRAILHEAD.lat, TRAILHEAD.lon, 0.10));
 
   setProgress(100, '完了');
-
   setTimeout(() => { document.getElementById('loading').classList.add('hide'); }, 350);
 
   buildTimeline();
   buildTemps();
   buildGear();
+  showTab('timeline');
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
