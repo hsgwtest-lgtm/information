@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="富士INFO">
+  <meta name="theme-color" content="#020b18">
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Preconnect for Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <title>富士山 登山INFO 2026</title>
+</head>
+<body>
+
+<!-- ── Loading screen ─────────────────────────────────────────── -->
+<div id="loading" role="status" aria-label="読み込み中">
+  <div id="loading-icon" aria-hidden="true">🗻</div>
+  <div id="loading-title">富士山 登山INFO</div>
+  <div id="loading-year">2026</div>
+</div>
+
+<!-- ── Elevation indicator (left rail) ───────────────────────── -->
+<aside id="elev-rail" aria-label="標高インジケーター">
+  <div id="elev-summit-label" aria-hidden="true">3,776m</div>
+  <div id="elev-track-wrap">
+    <div id="elev-track" role="presentation">
+      <div id="elev-fill"></div>
+      <div id="elev-marker" aria-hidden="true"></div>
+    </div>
+  </div>
+  <div id="elev-base-label" aria-hidden="true">2,305m</div>
+</aside>
+
+<!-- ── Header ────────────────────────────────────────────────── -->
+<header id="header">
+  <div id="header-brand">
+    <span class="brand-icon" aria-hidden="true">🗻</span>
+    <div id="header-titles">
+      <span class="brand-name">富士山 登山INFO</span>
+      <span class="brand-sub">2026 · 吉田ルート · 星観荘</span>
+    </div>
+  </div>
+  <div id="plan-pills" role="group" aria-label="登山プランを選択">
+    <button class="plan-pill active" data-plan="A" onclick="switchPlan('A')" aria-pressed="true">🌄 Plan A</button>
+    <button class="plan-pill"        data-plan="B" onclick="switchPlan('B')" aria-pressed="false">☀️ Plan B</button>
+  </div>
+</header>
+
+<!-- ── Main content area ──────────────────────────────────────── -->
+<main id="content">
+
+  <!-- ── TIMELINE PANE ──────────────────────────────────────── -->
+  <div class="pane active" data-tab="timeline" role="tabpanel" aria-labelledby="nav-timeline">
+
+    <!-- Plan cards (swipeable) -->
+    <div id="plan-slider-wrap">
+      <div id="plan-slider">
+
+        <!-- Plan A card -->
+        <div class="plan-card" data-plan="A">
+          <div class="plan-card-inner" style="--plan-accent: #f97316">
+            <div class="plan-card-header">
+              <span class="plan-card-icon" aria-hidden="true">🌄</span>
+              <div>
+                <div class="plan-card-title">Plan A — ご来光バージョン</div>
+                <div class="plan-card-desc">深夜1:00出発 → 山頂でご来光を鑑賞</div>
+              </div>
+            </div>
+            <div id="timeline-A"></div>
+          </div>
+        </div>
+
+        <!-- Plan B card -->
+        <div class="plan-card" data-plan="B">
+          <div class="plan-card-inner" style="--plan-accent: #eab308">
+            <div class="plan-card-header">
+              <span class="plan-card-icon" aria-hidden="true">☀️</span>
+              <div>
+                <div class="plan-card-title">Plan B — 昼間登山バージョン</div>
+                <div class="plan-card-desc">朝5:00出発 → 山頂 · お鉢巡り</div>
+              </div>
+            </div>
+            <div id="timeline-B"></div>
+          </div>
+        </div>
+
+      </div><!-- /plan-slider -->
+    </div><!-- /plan-slider-wrap -->
+
+    <!-- Swipe indicator dots -->
+    <div id="plan-dots" role="tablist" aria-label="プラン切り替え">
+      <button class="plan-dot active" role="tab" aria-selected="true"  onclick="switchPlan('A')" aria-label="Plan A" title="Plan A"></button>
+      <button class="plan-dot"        role="tab" aria-selected="false" onclick="switchPlan('B')" aria-label="Plan B" title="Plan B"></button>
+    </div>
+
+  </div><!-- /timeline pane -->
+
+  <!-- ── GEAR PANE ──────────────────────────────────────────── -->
+  <div class="pane" data-tab="gear" role="tabpanel" aria-labelledby="nav-gear">
+
+    <!-- Progress bar -->
+    <div id="gear-progress-wrap">
+      <div id="gear-progress-header">
+        <span id="gear-progress-label">チェック済み</span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="gear-progress-count" class="num">0 / 0</span>
+          <button id="gear-reset-btn" onclick="resetGear()" aria-label="リセット">リセット</button>
+        </div>
+      </div>
+      <div id="gear-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="gear-progress-fill"></div>
+      </div>
+    </div>
+
+    <!-- Checklist items (rendered by JS) -->
+    <div id="gear-list" role="list"></div>
+
+  </div><!-- /gear pane -->
+
+  <!-- ── TEMP PANE ──────────────────────────────────────────── -->
+  <div class="pane" data-tab="temp" role="tabpanel" aria-labelledby="nav-temp">
+
+    <div class="temp-section-header">
+      <h2 class="temp-section-title">🌡 標高別気温</h2>
+      <span class="temp-section-hint">7月 目安</span>
+    </div>
+
+    <!-- Legend -->
+    <div class="temp-legend" aria-hidden="true">
+      <div class="temp-legend-item">
+        <div class="temp-legend-dot day"></div>
+        <span>昼間</span>
+      </div>
+      <div class="temp-legend-item">
+        <div class="temp-legend-dot night"></div>
+        <span>夜間</span>
+      </div>
+    </div>
+
+    <!-- Temp cards (rendered by JS) -->
+    <div id="temp-cards" class="temp-cards" role="list"></div>
+
+    <!-- Windchill note -->
+    <div class="temp-windchill-note" role="note">
+      ❄️ <strong>体感気温に注意：</strong>山頂付近は強風が多く、体感気温は実測より<strong>5〜10℃以上</strong>低くなります。防寒対策を十分に。
+    </div>
+
+  </div><!-- /temp pane -->
+
+  <!-- ── INFO PANE ──────────────────────────────────────────── -->
+  <div class="pane" data-tab="info" role="tabpanel" aria-labelledby="nav-info">
+
+    <!-- AMS section -->
+    <section class="info-section" aria-labelledby="ams-heading">
+      <h2 class="info-section-title" id="ams-heading">⚠️ 高山病対策</h2>
+      <div class="ams-card" role="list">
+
+        <div class="ams-row danger" role="listitem">
+          <span class="ams-label">症状</span>
+          <div class="ams-content">
+            頭痛・吐き気・めまい・疲労感・食欲不振
+          </div>
+        </div>
+
+        <div class="ams-row" role="listitem">
+          <span class="ams-label">予防</span>
+          <div class="ams-content">
+            <ul>
+              <li>五合目で30分以上 高所順応（必須）</li>
+              <li>会話できるペースでゆっくり登る</li>
+              <li>1時間に200〜300ml 水分補給</li>
+              <li>深呼吸を意識する</li>
+              <li>前日は禁酒・十分な睡眠</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="ams-row warn" role="listitem">
+          <span class="ams-label">発症時</span>
+          <div class="ams-content">
+            1名でも症状が出たら<strong>全員即下山</strong><br>
+            下山すれば急速に回復します
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Emergency contacts -->
+    <section class="info-section" aria-labelledby="emg-heading">
+      <h2 class="info-section-title" id="emg-heading">🚨 緊急連絡先</h2>
+      <div class="emg-list">
+        <a class="emg-item" href="tel:0555730110" role="link" aria-label="山梨県警察 山岳救助隊 0555-73-0110">
+          <span class="emg-icon" aria-hidden="true">🚁</span>
+          <div class="emg-body">
+            <div class="emg-name">山梨県警察 山岳救助隊</div>
+            <div class="emg-number num">0555-73-0110</div>
+          </div>
+          <span class="emg-call-icon" aria-hidden="true">📞</span>
+        </a>
+        <a class="emg-item" href="tel:0555246516" role="link" aria-label="六合目 安全指導センター 0555-24-6516">
+          <span class="emg-icon" aria-hidden="true">🏔</span>
+          <div class="emg-body">
+            <div class="emg-name">六合目 安全指導センター</div>
+            <div class="emg-number num">0555-24-6516</div>
+          </div>
+          <span class="emg-call-icon" aria-hidden="true">📞</span>
+        </a>
+      </div>
+    </section>
+
+    <footer id="app-footer">
+      富士山登山INFO 2026 · 吉田ルート · 星観荘
+    </footer>
+
+  </div><!-- /info pane -->
+
+</main><!-- /content -->
+
+<!-- ── Bottom navigation ──────────────────────────────────────── -->
+<nav id="bottom-nav" role="tablist" aria-label="メインナビゲーション">
+
+  <button class="nav-btn active" role="tab" id="nav-timeline"
+          aria-selected="true" data-tab="timeline"
+          onclick="showTab('timeline')">
+    <span class="nav-icon" aria-hidden="true">⏱</span>
+    <span class="nav-label">タイム</span>
+  </button>
+
+  <button class="nav-btn" role="tab" id="nav-gear"
+          aria-selected="false" data-tab="gear"
+          onclick="showTab('gear')">
+    <span class="nav-icon" aria-hidden="true">🎒</span>
+    <span class="nav-label">装備</span>
+    <span id="gear-nav-badge" class="nav-badge" aria-label="チェック済み数"></span>
+  </button>
+
+  <button class="nav-btn" role="tab" id="nav-temp"
+          aria-selected="false" data-tab="temp"
+          onclick="showTab('temp')">
+    <span class="nav-icon" aria-hidden="true">🌡</span>
+    <span class="nav-label">気温</span>
+  </button>
+
+  <button class="nav-btn" role="tab" id="nav-info"
+          aria-selected="false" data-tab="info"
+          onclick="showTab('info')">
+    <span class="nav-icon" aria-hidden="true">ℹ️</span>
+    <span class="nav-label">情報</span>
+  </button>
+
+</nav>
+
+<!-- Scripts (data first, then checklist & ui) -->
+<script src="js/data.js"></script>
+<script src="js/checklist.js"></script>
+<script src="js/ui.js"></script>
+
+<script>
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+</script>
+
+</body>
+</html>
