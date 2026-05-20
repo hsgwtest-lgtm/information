@@ -1,0 +1,14 @@
+{
+  "name": "富士山 登山INFO 2026",
+  "short_name": "富士INFO",
+  "description": "吉田ルート登山プラン — Plan A ご来光 / Plan B 昼間 — 2026年7月",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020b18",
+  "theme_color": "#020b18",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
