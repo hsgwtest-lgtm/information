@@ -212,6 +212,23 @@ let playbackIdx    = 0;
 let playbackTimeout = null;
 let viewMode       = false;
 
+// 'map'  = 🗺 route view with elevation-based camera
+// 'fuji' = 🗻 appreciation / auto-rotate view
+let viewPreset = 'map';
+
+// Y-offset applied to camera.lookAt() so Mt. Fuji appears
+// in the visible area above the panel when the panel is open.
+// Panel is ~57 vh; the centre of the 3D look-at must shift upward
+// by roughly half the panel height to keep Mt. Fuji in the visible area.
+// Empirically derived: −2.2 world-units ≈ 20–25 % of screen height at
+// the default orbit radius of 13 with a 46 ° FOV.
+// 0 when panel is collapsed (view-mode) — no offset needed.
+const PANEL_LOOK_OFFSET_Y = -2.2;
+
+// Orbit radius bounds for 🗺 map mode (linear scale: trailhead → summit)
+const MAP_RADIUS_FAR  = 13.0; // radius at the trailhead (t = 0)
+const MAP_RADIUS_NEAR = 10.0; // radius at the summit   (t = 1)
+
 function loadGearState() {
   try { const s = localStorage.getItem('fujinfo-gear-2026'); return s ? new Set(JSON.parse(s)) : new Set(); }
   catch(e) { return new Set(); }
@@ -269,7 +286,10 @@ function applyOrbit() {
     orbitTarget.y + orbitRadius * Math.cos(orbitPhi),
     orbitTarget.z + orbitRadius * sp * Math.cos(orbitTheta)
   );
-  camera.lookAt(orbitTarget);
+  // When the panel is open, shift the look-at point downward so that
+  // Mt. Fuji appears centered in the visible area above the panel.
+  const yOff = viewMode ? 0 : PANEL_LOOK_OFFSET_Y;
+  camera.lookAt(orbitTarget.x, orbitTarget.y + yOff, orbitTarget.z);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -661,41 +681,49 @@ function setupControls() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   VIEW PRESETS  (quick camera positions)
+   VIEW PRESETS  (🗺 route map / 🗻 fuji appreciation)
    ═══════════════════════════════════════════════════════════════ */
 
-function setView(preset) {
-  autoRotate  = false;
-  targetTheta = null;
+/* ═══════════════════════════════════════════════════════════════
+   VIEW PRESETS  (🗺 route map / 🗻 fuji appreciation)
+   ═══════════════════════════════════════════════════════════════ */
+
+// Returns a suitable orbit-target Y that sits halfway up the summit.
+function _summitOrbitY() {
+  return hmap ? geoH(SUMMIT.lat, SUMMIT.lon) * 0.55 : 2.0;
+}
+
+function setViewPreset(preset) {
+  viewPreset = preset;
 
   document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById('vbtn-' + preset);
   if (btn) btn.classList.add('active');
 
-  if (preset === 'full') {
-    orbitRadius = 13; orbitPhi = 0.70; orbitTheta = 0.45;
-    orbitTarget.set(
-      lon2wx(SUMMIT.lon),
-      hmap ? geoH(SUMMIT.lat, SUMMIT.lon) * 0.50 : 2.0,
-      lat2wz(SUMMIT.lat)
-    );
-  } else if (preset === 'mid') {
-    const wp = YOSHIDA_WPS[5]; // 七合目
-    orbitRadius = 5.5; orbitPhi = 0.88; orbitTheta = -0.45;
-    orbitTarget.set(
-      lon2wx(wp.lon),
-      hmap ? geoH(wp.lat, wp.lon) + 0.3 : 2.7,
-      lat2wz(wp.lat)
-    );
-  } else if (preset === 'summit') {
-    orbitRadius = 3.0; orbitPhi = 0.52; orbitTheta = 0.20;
-    orbitTarget.set(
-      lon2wx(SUMMIT.lon),
-      hmap ? geoH(SUMMIT.lat, SUMMIT.lon) + 0.15 : 3.6,
-      lat2wz(SUMMIT.lat)
-    );
+  if (preset === 'fuji') {
+    // 🗻 Appreciation mode: bird's-eye orbit with auto-rotate.
+    // Collapse the panel so the full mountain is visible.
+    autoRotate  = true;
+    targetTheta = null;
+    orbitRadius = 14;
+    orbitPhi    = 0.52;
+    orbitTarget.set(lon2wx(SUMMIT.lon), _summitOrbitY(), lat2wz(SUMMIT.lat));
+    // Collapse the panel to maximise the 3D view
+    if (!viewMode) toggleViewMode();
+    else applyOrbit();
+
+  } else {
+    // 🗺 Map mode: full route in frame, camera follows elevation.
+    autoRotate  = false;
+    targetTheta = null;
+    orbitRadius = MAP_RADIUS_FAR;
+    orbitPhi    = 0.70;
+    orbitTheta  = 0.45;
+    orbitTarget.set(lon2wx(SUMMIT.lon), _summitOrbitY(), lat2wz(SUMMIT.lat));
+    // Open the panel to show route info
+    if (viewMode) toggleViewMode();
+    else applyOrbit();
   }
-  applyOrbit();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1012,13 +1040,16 @@ function onStepSelect(idx, t) {
     updateHUD(step);
   }
 
-  // Smoothly face the marker position and adjust zoom by elevation
-  if (hmap) {
+  // Move camera only in 🗺 map mode.
+  // In 🗻 fuji mode the camera keeps auto-rotating; only the marker moves.
+  if (viewPreset === 'map' && hmap) {
     const pos = tToPos(t);
     const wx  = lon2wx(pos.lon), wz = lat2wz(pos.lat);
     const dx  = wx - orbitTarget.x, dz = wz - orbitTarget.z;
     targetTheta = Math.atan2(dx, dz) + Math.PI * 0.25;
-    orbitRadius = t >= 0.90 ? 3.5 : t >= 0.60 ? 5.5 : t >= 0.30 ? 7.5 : 9.0;
+    // Keep a wide enough radius so the full route context stays visible.
+    // Linear scale: MAP_RADIUS_FAR at the trailhead, MAP_RADIUS_NEAR at the summit.
+    orbitRadius = MAP_RADIUS_FAR - t * (MAP_RADIUS_FAR - MAP_RADIUS_NEAR);
   }
 
   document.querySelectorAll('.t-step').forEach((el, i) => el.classList.toggle('sel', i === idx));
@@ -1071,6 +1102,8 @@ function toggleViewMode() {
   document.body.classList.toggle('view-mode', viewMode);
   const label = document.getElementById('grip-label');
   if (label) label.textContent = viewMode ? '📋 パネルを開く' : '🗻 鑑賞モード';
+  // Refresh camera lookAt offset based on new panel state
+  applyOrbit();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1109,6 +1142,7 @@ function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  applyOrbit(); // re-apply panel look-at offset for new viewport
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1149,11 +1183,7 @@ async function init() {
   const [heights, photoCanvas] = await Promise.all([loadDEM(), loadPhotoCanvas()]);
   hmap = heights;
 
-  orbitTarget.set(
-    lon2wx(SUMMIT.lon),
-    geoH(SUMMIT.lat, SUMMIT.lon) * 0.55,
-    lat2wz(SUMMIT.lat)
-  );
+  orbitTarget.set(lon2wx(SUMMIT.lon), _summitOrbitY(), lat2wz(SUMMIT.lat));
   applyOrbit();
 
   labelDefs.forEach(d => {
