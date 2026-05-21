@@ -37,11 +37,10 @@
     </div>
   </header>
 
-  <!-- ── 3D camera preset buttons (right side, above panel) ──── -->
-  <div id="view-btns" role="group" aria-label="カメラ視点">
-    <button class="view-btn active" id="vbtn-full"   onclick="setView('full')"   title="全体表示">🗺️</button>
-    <button class="view-btn"        id="vbtn-mid"    onclick="setView('mid')"    title="中腹">⛰</button>
-    <button class="view-btn"        id="vbtn-summit" onclick="setView('summit')" title="山頂">🏔</button>
+  <!-- ── 3D camera mode buttons (right side, above panel) ──── -->
+  <div id="view-btns" role="group" aria-label="カメラモード">
+    <button class="view-btn active" id="vbtn-map"  onclick="setViewPreset('map')"  title="ルート全景">🗺</button>
+    <button class="view-btn"        id="vbtn-fuji" onclick="setViewPreset('fuji')" title="富士山鑑賞">🗻</button>
   </div>
 
   <!-- ── Content panel (fixed bottom sheet) ─────────────────── -->
