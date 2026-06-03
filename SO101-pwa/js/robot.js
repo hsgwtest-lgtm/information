@@ -13,10 +13,10 @@ export const DH_PARAMS = [
   { a: 0,   d: 60,  alpha: 0,            min: -Math.PI,     max: Math.PI     }, // J6
 ];
 
-/** Home position angles (radians) — upright neutral */
-export const HOME_ANGLES = [0, 0, 0, 0, 0, 0];
+/** Home position angles (radians) — upright neutral with slightly bent elbow */
+export const HOME_ANGLES = [0, -Math.PI / 6, Math.PI / 4, 0, -Math.PI / 12, 0];
 
-/** Zero position (all zeros) */
+/** Zero position (all joints at 0°) */
 export const ZERO_ANGLES = [0, 0, 0, 0, 0, 0];
 
 /**
@@ -40,10 +40,10 @@ export function dhMatrix(theta, d, a, alpha) {
 }
 
 /**
- * Compute forward kinematics: returns an array of 7 THREE.Matrix4
- * (cumulative transforms from base to each joint frame, including EE).
+ * Compute forward kinematics: returns an array of 6 THREE.Matrix4
+ * (cumulative transforms from base to each joint frame).
  * @param {number[]} angles — 6 joint angles in radians
- * @returns {THREE.Matrix4[]} — transforms[0..5] = joint frames, transforms[6] = EE
+ * @returns {THREE.Matrix4[]} — transforms[0..5] = joint frames
  */
 export function computeFK(angles, THREE) {
   const transforms = [];

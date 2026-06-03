@@ -15,6 +15,7 @@ export class VirtualBox {
     this.attached = false;
     this._falling = false;
     this._fallVelocity = 0;
+    this._lastTime = 0;
 
     // Create mesh
     const geo = new THREE.BoxGeometry(size, size, size);
@@ -44,11 +45,15 @@ export class VirtualBox {
         this.attached = false;
         this._falling = true;
         this._fallVelocity = 0;
+        this._lastTime = 0;
       }
     } else if (this._falling) {
       // Gravity fall to Y=0 (floor) + half box size
-      this._fallVelocity += 9.8 * 0.016; // ~60fps step
-      this.mesh.position.y -= this._fallVelocity;
+      const now = performance.now();
+      const dt = this._lastTime ? Math.min((now - this._lastTime) / 1000, 0.05) : 0.016;
+      this._lastTime = now;
+      this._fallVelocity += 9.8 * dt * 60; // gravity in mm/s
+      this.mesh.position.y -= this._fallVelocity * dt;
 
       const floor = this.size / 2;
       if (this.mesh.position.y <= floor) {

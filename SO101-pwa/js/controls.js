@@ -42,7 +42,7 @@ export class Controls {
   // ─── FK Panel ─────────────────────────────────────────
   _buildFKPanel() {
     const panel = document.getElementById('panel-fk');
-    const labels = ['J1 Base', 'J2 Shoulder', 'J3 Elbow', 'J4 Wrist Roll', 'J5 Wrist Pitch', 'J6 Wrist Roll2', 'Gripper'];
+    const labels = ['J1 Base', 'J2 Shoulder', 'J3 Elbow', 'J4 Wrist Roll', 'J5 Wrist Pitch', 'J6 Tool Rotate', 'Gripper'];
 
     labels.forEach((label, i) => {
       const row = document.createElement('div');
