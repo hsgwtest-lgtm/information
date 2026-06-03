@@ -7,14 +7,14 @@ GitHub Pages（iOS Safari）で動作することが最優先です。
 ---
 
 ### デプロイ先
-`hsgwtest-lgtm.github.io/so101-pwa/`
+`hsgwtest-lgtm.github.io/SO101-pwa/`
 
 ---
 
 ### ファイル構成（必ずこの構成で作成）
 
 ```
-so101-pwa/
+SO101-pwa/
 ├── index.html
 ├── manifest.json
 ├── sw.js
