@@ -334,9 +334,7 @@
 
   // ---------- Three.js mesh helpers ----------
   function meshToCSG(mesh) {
-    const geom = mesh.geometry.index
-      ? mesh.geometry
-      : mesh.geometry.toNonIndexed ? mesh.geometry : mesh.geometry;
+    const geom = mesh.geometry;
     if (!geom.getAttribute('normal')) geom.computeVertexNormals();
     mesh.updateMatrixWorld();
     return CSG.fromGeometry(geom, mesh.matrixWorld);

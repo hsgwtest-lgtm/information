@@ -81,17 +81,26 @@
   async function saveProject(id, name, meshes) {
     const database = await openDB();
     const serialized = meshes.map(m => serializeMesh(m));
+    const now = Date.now();
     const project = {
       id: id,
       name: name,
       meshes: serialized,
-      updatedAt: Date.now(),
-      createdAt: (await getProject(id))?.createdAt || Date.now()
+      updatedAt: now,
+      createdAt: now
     };
 
     return new Promise((resolve, reject) => {
       const tx = database.transaction(STORE_NAME, 'readwrite');
-      tx.objectStore(STORE_NAME).put(project);
+      const store = tx.objectStore(STORE_NAME);
+      // Preserve original createdAt if project exists
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        if (getReq.result && getReq.result.createdAt) {
+          project.createdAt = getReq.result.createdAt;
+        }
+        store.put(project);
+      };
       tx.oncomplete = () => resolve(project);
       tx.onerror = (e) => reject(e.target.error);
     });
