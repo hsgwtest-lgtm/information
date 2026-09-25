@@ -7,6 +7,7 @@ import {
   MathUtils, ShapeUtils, TextGeometry, RoundedBoxGeometry, mergeVertices,
   Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION,
 } from '../vendor/vendor.js';
+import { flattenSketch } from './bezier.js';
 
 let font = null;
 export function setFont(f) { font = f; }
@@ -38,6 +39,7 @@ export function defaultParams(kind) {
   const p = {};
   for (const [k, , def] of KINDS[kind].params) p[k] = def;
   if (kind === 'text') p.text = 'Hello';
+  if (kind === 'extrude' || kind === 'revolve') p.curves = null;
   if (kind === 'extrude') p.pts = [[-10, -10], [10, -10], [10, 10], [-10, 10]];
   if (kind === 'revolve') p.pts = [[0, 0], [10, 0], [10, 3], [4, 6], [4, 20], [0, 20]];
   return p;
@@ -122,15 +124,16 @@ function primitive(kind, p) {
       return g;
     }
     case 'extrude': {
-      let pts = (p.pts || []).map(([x, y]) => new Vector2(x, y));
-      if (pts.length < 3 || Math.abs(polygonArea(p.pts)) < 1e-6) return new BoxGeometry(1, 1, 1);
+      const flat = flattenSketch(p.pts || [], p.curves);
+      if (flat.length < 3 || Math.abs(polygonArea(flat)) < 1e-6) return new BoxGeometry(1, 1, 1);
+      const pts = flat.map(([x, y]) => new Vector2(x, y));
       const g = new ExtrudeGeometry(new Shape(pts), { depth: p.h, bevelEnabled: false });
       g.translate(0, 0, -p.h / 2);
       return g;
     }
     case 'revolve': {
       // Sketch x = radius, y = height. Profile is a closed polygon.
-      let pts = (p.pts || []).map(([x, y]) => [Math.max(0, x), y]);
+      let pts = flattenSketch(p.pts || [], p.curves).map(([x, y]) => [Math.max(0, x), y]);
       if (pts.length < 3 || Math.abs(polygonArea(pts)) < 1e-6) return new BoxGeometry(1, 1, 1);
       // Lathe needs a consistent winding to produce outward-facing normals.
       if (polygonArea(pts) < 0) pts = pts.reverse();

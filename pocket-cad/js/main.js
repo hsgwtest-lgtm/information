@@ -12,7 +12,7 @@ import {
 } from './ui.js';
 import { editSketch } from './sketch.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const COLORS = ['#4f9dff', '#ffb020', '#ef5f56', '#57c26a', '#b07cff', '#f2f2f2', '#40464f', '#ff8ad8'];
 const SNAPS = [0.1, 0.5, 1, 5, 10];
 const MATERIALS = [['PLA', 1.24], ['PETG', 1.27], ['ABS', 1.04], ['ASA', 1.07], ['TPU', 1.21], ['レジン', 1.15]];
@@ -378,10 +378,10 @@ function renderAddTray() {
 
 async function addKind(k) {
   if (KINDS[k].sketch) {
-    const r = await editSketch({ pts: defaultParams(k).pts, mode: k });
+    const r = await editSketch({ pts: defaultParams(k).pts, curves: null, mode: k });
     if (!r) return;
     if (r.invalid) { toast('辺が交差しているため作成できません', 2500); return; }
-    const p = { ...defaultParams(k), pts: r.pts };
+    const p = { ...defaultParams(k), pts: r.pts, curves: r.curves };
     addNode(k, { params: p });
     return;
   }
@@ -489,10 +489,10 @@ function renderProps(ns) {
     props.append(section('断面', el('button', {
       class: 'btn', style: { width: '100%' },
       onclick: async () => {
-        const r = await editSketch({ pts: n.params.pts, mode: n.kind });
+        const r = await editSketch({ pts: n.params.pts, curves: n.params.curves, mode: n.kind });
         if (!r) return;
         if (r.invalid) { toast('辺が交差しているため反映できません', 2500); return; }
-        editShape('pts', () => { n.params.pts = r.pts; })();
+        editShape('pts', () => { n.params.pts = r.pts; n.params.curves = r.curves; })();
       },
     }, icon('edit'), 'スケッチを編集')));
   }

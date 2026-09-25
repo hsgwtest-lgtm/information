@@ -1,5 +1,5 @@
 // Offline-first service worker. Bump VERSION whenever any cached file changes.
-const VERSION = 'pocket-cad-v1.0.0';
+const VERSION = 'pocket-cad-v1.1.0';
 const ASSETS = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const ASSETS = [
   './js/storage.js',
   './js/ui.js',
   './js/sketch.js',
+  './js/bezier.js',
   './vendor/vendor.js',
   './vendor/helvetiker_bold.typeface.json',
   './icons/icon-192.png',
