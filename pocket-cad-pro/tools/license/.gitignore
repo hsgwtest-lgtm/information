@@ -1,0 +1,2 @@
+# Never commit the signing key: anyone holding it can mint licenses.
+private-key.pem
