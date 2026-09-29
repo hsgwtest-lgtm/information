@@ -17,7 +17,7 @@ import { ISO } from './pro/threads.js';
 import { build3mf, buildObj } from './pro/export3mf.js';
 import * as adv from './pro/advanced.js';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 const COLORS = ['#4f9dff', '#ffb020', '#ef5f56', '#57c26a', '#b07cff', '#f2f2f2', '#40464f', '#ff8ad8'];
 const SNAPS = [0.1, 0.5, 1, 5, 10];
 const MATERIALS = [['PLA', 1.24], ['PETG', 1.27], ['ABS', 1.04], ['ASA', 1.07], ['TPU', 1.21], ['レジン', 1.15]];
@@ -1038,7 +1038,10 @@ function updateToolBar() {
 function updatePlanChip() {
   const st = license.getState();
   const b = $('btn-plan');
-  b.textContent = st.tier === 'pro' ? 'PRO' : st.tier === 'trial' ? `お試し ${st.daysLeft}日` : 'Pro を試す';
+  // Crown only; the plan state is conveyed by style and the accessible label.
+  const label = st.tier === 'pro' ? 'Pro プラン' : st.tier === 'trial' ? `お試し中（残り ${st.daysLeft} 日）` : 'Pro を試す';
+  b.setAttribute('aria-label', label);
+  b.title = label;
   b.classList.toggle('active', st.tier !== 'free');
 }
 

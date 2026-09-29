@@ -1,6 +1,6 @@
 // Pro, second wave: templates, pattern holes, split with dowels, place on face,
 // my parts library, share links, design variables and printer profiles.
-import { Matrix4, Vector3, Quaternion, Mesh, Raycaster, MeshBasicMaterial, DoubleSide } from '../../vendor/vendor.js';
+import { Matrix4, Vector3, Quaternion, Ray, DoubleSide, BufferGeometry, MeshBVH } from '../../vendor/vendor.js';
 import { el, icon, toast, openDialog, closeDialog, numField, segmented, fmt, promptDialog, saveFile, evalExpr } from '../ui.js';
 import { nodeGeometry, nodeMatrix, registerMeshData, getMeshData } from '../geometry.js';
 import * as store from '../storage.js';
@@ -83,23 +83,33 @@ async function templateParams(t) {
 }
 
 // ---------------------------------------------------------------- ray helpers
-function nodeRaycaster(n) {
-  const mesh = new Mesh(nodeGeometry(n), new MeshBasicMaterial({ side: DoubleSide }));
-  mesh.matrixAutoUpdate = false;
-  nodeMatrix(n, mesh.matrix);
-  mesh.updateMatrixWorld(true);
-  const rc = new Raycaster();
-  // All crossings of the line through `origin` along `dir`, as distances from origin.
-  const hits = (origin, dir) => { rc.set(origin, dir); rc.far = Infinity; return rc.intersectObject(mesh, false).map((h) => h.distance); };
-  return { mesh, hits };
+// World-space copy of a part with a BVH, so point-in-solid tests stay fast even for
+// detailed parts (threads, lithophanes, templates with many triangles).
+function nodeBVH(n) {
+  const g = nodeGeometry(n);
+  const m = nodeMatrix(n, new Matrix4());
+  const world = new BufferGeometry();
+  world.setAttribute('position', g.getAttribute('position').clone().applyMatrix4(m));
+  world.computeBoundingBox();
+  return new MeshBVH(world);
+}
+
+// Does the vertical line through (x, y) pass through material anywhere? Used for
+// through-holes, so hollow parts (trays, boxes) are judged by their footprint.
+function columnTest(n) {
+  const bvh = nodeBVH(n);
+  const z0 = bvh.geometry.boundingBox.min.z;
+  const ray = new Ray(new Vector3(), new Vector3(0, 0, 1));
+  return (p) => { ray.origin.set(p.x, p.y, z0 - 1); return !!bvh.raycastFirst(ray, DoubleSide); };
 }
 
 // Is the point inside the (closed) solid? Counts crossings along +Z.
 function insideTest(n) {
-  const { hits } = nodeRaycaster(n);
-  const up = new Vector3(0, 0, 1);
+  const bvh = nodeBVH(n);
+  const ray = new Ray(new Vector3(), new Vector3(0, 0, 1));
   return (p) => {
-    const d = hits(new Vector3(p.x, p.y, p.z), up);
+    ray.origin.set(p.x, p.y, p.z);
+    const d = bvh.raycast(ray, DoubleSide).map((h) => h.distance).sort((a, b) => a - b);
     // Collapse duplicate crossings on shared edges.
     const uniq = d.filter((x, i) => i === 0 || x - d[i - 1] > 1e-4);
     return uniq.length % 2 === 1;
@@ -107,50 +117,97 @@ function insideTest(n) {
 }
 
 // ---------------------------------------------------------------- pattern holes
+const MAX_HOLES = 300;
+
+// Rough hole count for a rectangle-ish footprint (used for the live estimate and the cap).
+function estimateHoles(w, d, st) {
+  const aw = Math.max(0, w - 2 * st.margin), ad = Math.max(0, d - 2 * st.margin);
+  const pitch = st.size + st.rib;
+  const cell = st.shape === 'hex' ? pitch * pitch * 0.866 : pitch * pitch;
+  return Math.floor((aw * ad) / cell);
+}
+
+// Sensible defaults for this part: about 6–10 holes across the shorter side.
+function patternDefaults(w, d, shape) {
+  const short = Math.max(1, Math.min(w, d));
+  const size = Math.min(20, Math.max(3, Math.round(short / 9)));
+  const st = { shape, size, rib: Math.max(1.2, Math.round(size * 0.25 * 10) / 10), margin: Math.max(2, Math.round(size * 0.5)), through: 1, depth: 2 };
+  // Very large, thin parts: grow the holes until the count is reasonable.
+  while (estimateHoles(w, d, st) > MAX_HOLES * 0.6 && st.size < 40) { st.size += 1; st.rib = Math.max(1.2, Math.round(st.size * 0.25 * 10) / 10); }
+  return st;
+}
+
 export async function patternDialog() {
   const ns = app.selNodes();
   if (ns.length !== 1 || ns[0].hole) { toast('穴をあける部品を 1 つ選択してください'); return; }
   const n = ns[0];
-  const st = { shape: 'hex', size: 6, rib: 1.6, margin: 3, through: 1, depth: 2, ...store.getSetting('pattern', {}) };
+  const box = app.vp.nodeBox(n);
+  const W = box.max.x - box.min.x, D = box.max.y - box.min.y, H = box.max.z - box.min.z;
+  const tris = nodeGeometry(n).getAttribute('position').count / 3;
+  const heavy = tris > 30000 ? Math.round(tris) : 0;
+  // Defaults always come from this part's size (only the shape choice is remembered).
+  const st = patternDefaults(W, D, store.getSetting('patternShape', 'hex'));
+  st.depth = Math.max(0.4, Math.min(2, Math.round(H * 5) / 10));
+  const est = el('div', { class: 'hint' });
+  const updateEst = () => {
+    const k = estimateHoles(W, D, st);
+    est.textContent = `部品 ${Math.round(W)} × ${Math.round(D)} mm ・ 推定 約 ${k} 個` + (k > MAX_HOLES ? `（上限 ${MAX_HOLES} 個を超えるため、穴を自動で大きくします）` : '');
+    est.style.color = k > MAX_HOLES ? 'var(--accent)' : '';
+  };
+  const fields = el('div');
+  const renderFields = () => {
+    fields.replaceChildren(
+      el('div', { class: 'row' },
+        numField({ label: '穴の大きさ', value: st.size, min: 2, max: 60, step: 0.5, onChange: (v) => { st.size = v; updateEst(); } }),
+        numField({ label: 'リブ幅', value: st.rib, min: 0.8, max: 20, step: 0.2, onChange: (v) => { st.rib = v; updateEst(); } }),
+        numField({ label: '縁の余白', value: st.margin, min: 0, max: 50, step: 0.5, onChange: (v) => { st.margin = v; updateEst(); } })),
+      el('div', { class: 'field' }, el('span', {}, '深さ'), segmented([[1, '貫通'], [0, '上から指定']], st.through, (v) => { st.through = v; })),
+      numField({ label: '深さ（上から指定の場合） mm', value: st.depth, min: 0.2, max: Math.max(0.2, H), step: 0.2, onChange: (v) => { st.depth = v; } }));
+    updateEst();
+  };
+  renderFields();
   const body = [
-    el('div', { class: 'field' }, el('span', {}, '形'), segmented([['hex', 'ハニカム'], ['circle', '丸'], ['square', '角']], st.shape, (v) => { st.shape = v; })),
-    el('div', { class: 'row' },
-      numField({ label: '穴の大きさ', value: st.size, min: 1, step: 0.5, onChange: (v) => { st.size = v; } }),
-      numField({ label: 'リブ幅', value: st.rib, min: 0.4, step: 0.2, onChange: (v) => { st.rib = v; } }),
-      numField({ label: '縁の余白', value: st.margin, min: 0, step: 0.5, onChange: (v) => { st.margin = v; } })),
-    el('div', { class: 'field' }, el('span', {}, '深さ'), segmented([[1, '貫通'], [0, '上から指定']], st.through, (v) => { st.through = v; })),
-    numField({ label: '深さ（上から指定の場合） mm', value: st.depth, min: 0.2, step: 0.2, onChange: (v) => { st.depth = v; } }),
+    el('div', { class: 'field' }, el('span', {}, '形'), segmented([['hex', 'ハニカム'], ['circle', '丸'], ['square', '角']], st.shape, (v) => { st.shape = v; updateEst(); })),
+    fields, est,
+    el('button', { type: 'button', class: 'btn', style: { width: '100%', marginTop: '8px' }, onclick: () => { Object.assign(st, patternDefaults(W, D, st.shape)); renderFields(); } }, '標準の値に戻す'),
     el('p', { class: 'hint' }, '上から見た部品の形に合わせて穴を並べ、部品とグループ化します（軽量化・通気・デザインに）。'),
+    heavy ? el('div', { class: 'warnbox' }, `この部品は三角形が多いため（${heavy.toLocaleString()}）、穴あけに数秒かかります。`) : null,
   ];
   const v = await openDialog({ title: 'パターン穴あけ', body, buttons: [{ label: 'キャンセル', value: 'cancel' }, { label: '穴をあける', value: 'ok', cls: 'accent' }] });
   if (v !== 'ok') return;
-  store.setSetting('pattern', st);
-  const box = app.vp.nodeBox(n);
-  const inside = insideTest(n);
-  const zProbe = st.through ? (box.min.z + box.max.z) / 2 : box.max.z - Math.min(st.depth, box.max.z - box.min.z) / 2;
-  const P = (x, y) => new Vector3(x, y, zProbe);
+  store.setSetting('patternShape', st.shape);
+  let grown = false;
+  while (estimateHoles(W, D, st) > MAX_HOLES) { st.size = Math.round(st.size * 1.15 * 10) / 10; grown = true; }
   const t0 = performance.now();
-  let tested = 0;
-  const pts = patternPoints({
-    shape: st.shape, size: st.size, rib: st.rib, x0: box.min.x, x1: box.max.x, y0: box.min.y, y1: box.max.y,
-    inside: (x, y, reach) => {
-      if (++tested > 6000) return false;
-      if (!inside(P(x, y))) return false;
-      return rimSamples(x, y, reach + st.margin).every(([px, py]) => inside(P(px, py)));
-    },
-  });
+  toast('穴の位置を計算中…', 1500);
+  await new Promise((r) => setTimeout(r, 30));
+  const inside = st.through ? columnTest(n) : insideTest(n);
+  const zProbe = st.through ? (box.min.z + box.max.z) / 2 : box.max.z - Math.min(st.depth, H) / 2;
+  const P = (x, y) => new Vector3(x, y, zProbe);
+  // Candidate centres first, then the (costlier) fit test in chunks so the UI keeps breathing.
+  const cands = [];
+  patternPoints({ shape: st.shape, size: st.size, rib: st.rib, x0: box.min.x, x1: box.max.x, y0: box.min.y, y1: box.max.y, inside: (x, y, reach) => { cands.push([x, y, reach]); return false; } });
+  const pts = [];
+  for (let i = 0; i < cands.length && pts.length < MAX_HOLES; i++) {
+    const [x, y, reach] = cands[i];
+    if (inside(P(x, y)) && rimSamples(x, y, reach + st.margin).every(([px, py]) => inside(P(px, py)))) pts.push([x, y]);
+    if (i % 200 === 199) await new Promise((r) => setTimeout(r, 0));
+  }
   if (!pts.length) { toast('穴を並べられる場所がありませんでした（穴を小さく・余白を狭くしてみてください）', 3500); return; }
   const cx = (box.min.x + box.max.x) / 2, cy = (box.min.y + box.max.y) / 2;
-  const depth = st.through ? box.max.z - box.min.z + 2 : st.depth + 1;
+  const depth = st.through ? H + 2 : st.depth + 1;
   const zc = st.through ? (box.min.z + box.max.z) / 2 : box.max.z - st.depth + depth / 2;
   const hole = N('pattern', { shape: st.shape, size: st.size, depth, pts: pts.map(([x, y]) => [r3(x - cx), r3(y - cy)]) }, [cx, cy, zc], { hole: true, name: 'パターン穴' });
+  // The boolean below runs on the main thread; let the message paint first.
+  toast(`${pts.length} 個の穴をあけています…`, heavy ? 10000 : 2000);
+  await new Promise((r) => setTimeout(r, 60));
   app.checkpoint();
   const g = recenter(G(n.name, [n, hole], n.color));
   const idx = app.S.doc.nodes.indexOf(n);
   app.S.doc.nodes.splice(idx, 1, g);
   app.S.sel = [g.id];
   app.commit();
-  toast(`${pts.length} 個の穴をあけました（${Math.round(performance.now() - t0)} ms）`);
+  toast(`${pts.length} 個の穴をあけました${grown ? `（数が多すぎるため穴を ${fmt(st.size)} mm にしました）` : ''}（${Math.round(performance.now() - t0)} ms）`, 3000);
 }
 
 // ---------------------------------------------------------------- split with dowels
