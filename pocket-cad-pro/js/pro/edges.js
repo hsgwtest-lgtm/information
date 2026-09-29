@@ -35,16 +35,34 @@ export function featureEdges(soup, angleDeg = 20, smooth = null) {
       e.faces.push(fi);
     }
   });
-  // Faces grouped by plane, for the T-junction test.
-  const planeKey = (f) => `${Math.round(f.n.x * 1e3)},${Math.round(f.n.y * 1e3)},${Math.round(f.n.z * 1e3)},${Math.round(f.d * 1e2)}`;
-  const byPlane = new Map();
-  faces.forEach((f, fi) => { const k = planeKey(f); if (!byPlane.has(k)) byPlane.set(k, []); byPlane.get(k).push(fi); });
+  // Uniform grid over face bounding boxes, so the T-junction test only looks at
+  // nearby coplanar faces (large flat regions would otherwise be O(n²)).
+  const bmin = new Vector3(Infinity, Infinity, Infinity), bmax = new Vector3(-Infinity, -Infinity, -Infinity);
+  for (const v of verts) { bmin.min(v); bmax.max(v); }
+  const cell = Math.max(bmax.x - bmin.x, bmax.y - bmin.y, bmax.z - bmin.z, 1e-3) / 48;
+  const ci = (x, o) => Math.floor((x - o) / cell);
+  const grid = new Map();
+  faces.forEach((f, fi) => {
+    const [a, b, c] = f.v.map((i) => verts[i]);
+    const x0 = ci(Math.min(a.x, b.x, c.x), bmin.x), x1 = ci(Math.max(a.x, b.x, c.x), bmin.x);
+    const y0 = ci(Math.min(a.y, b.y, c.y), bmin.y), y1 = ci(Math.max(a.y, b.y, c.y), bmin.y);
+    const z0 = ci(Math.min(a.z, b.z, c.z), bmin.z), z1 = ci(Math.max(a.z, b.z, c.z), bmin.z);
+    for (let i = x0; i <= x1; i++) for (let j = y0; j <= y1; j++) for (let k = z0; k <= z1; k++) {
+      const key = `${i},${j},${k}`;
+      let list = grid.get(key);
+      if (!list) grid.set(key, list = []);
+      list.push(fi);
+    }
+  });
+  const coplanar = (f, g) => f.n.dot(g.n) > 0.9999 && Math.abs(f.d - g.d) < 1e-3;
+  const v0 = new Vector3(), v1 = new Vector3(), v2 = new Vector3();
   const covers = (fi, p, skip) => {
-    for (const gi of byPlane.get(planeKey(faces[fi])) || []) {
-      if (gi === skip) continue;
+    const f = faces[fi];
+    for (const gi of grid.get(`${ci(p.x, bmin.x)},${ci(p.y, bmin.y)},${ci(p.z, bmin.z)}`) || []) {
+      if (gi === skip || !coplanar(f, faces[gi])) continue;
       const [a, b, c] = faces[gi].v.map((i) => verts[i]);
       // Barycentric containment with a small tolerance (the point lies on this face's plane).
-      const v0 = new Vector3().subVectors(c, a), v1 = new Vector3().subVectors(b, a), v2 = new Vector3().subVectors(p, a);
+      v0.subVectors(c, a); v1.subVectors(b, a); v2.subVectors(p, a);
       const d00 = v0.dot(v0), d01 = v0.dot(v1), d02 = v0.dot(v2), d11 = v1.dot(v1), d12 = v1.dot(v2);
       const inv = 1 / (d00 * d11 - d01 * d01);
       const u = (d11 * d02 - d01 * d12) * inv, w = (d00 * d12 - d01 * d02) * inv;
