@@ -8,7 +8,7 @@ export {
   BufferGeometry, BufferAttribute, Float32BufferAttribute, EdgesGeometry, PlaneGeometry,
   BoxGeometry, CylinderGeometry, SphereGeometry, ConeGeometry, TorusGeometry,
   ExtrudeGeometry, LatheGeometry, Shape, ShapeUtils, Path,
-  Vector2, Vector3, Quaternion, Euler, Matrix4, Box3, Plane, Raycaster, MathUtils,
+  Vector2, Vector3, Quaternion, Euler, Matrix4, Box3, Plane, Ray, Raycaster, MathUtils,
   DoubleSide, FrontSide, SRGBColorSpace,
 } from 'three';
 export { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -19,3 +19,4 @@ export { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 export { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 export { mergeVertices, mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 export { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
+export { MeshBVH } from 'three-mesh-bvh';

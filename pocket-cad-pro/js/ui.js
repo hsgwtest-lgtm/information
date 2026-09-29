@@ -100,35 +100,54 @@ const fmt = (v) => {
 };
 export { fmt };
 
-// Numeric field with -/+ steppers. onChange(newValue) fires on commit.
-export function numField({ label, value, step = 1, min = -Infinity, max = Infinity, axis = '', onChange, integer = false }) {
-  const input = el('input', { type: 'text', inputmode: 'decimal', enterkeyhint: 'done', value: fmt(value), 'aria-label': label });
+// Numeric field with -/+ steppers. onChange(newValue, expression|null) fires on commit.
+// With `vars` (a function returning {name: value}), the field accepts formulas such as
+// "壁厚*2"; the formula is passed back so the caller can store and re-evaluate it.
+export function numField({ label, value, step = 1, min = -Infinity, max = Infinity, axis = '', onChange, integer = false, expr = null, vars = null }) {
+  const input = el('input', { type: 'text', inputmode: vars ? 'text' : 'decimal', enterkeyhint: 'done', value: fmt(value), 'aria-label': label, autocapitalize: 'off', autocomplete: 'off' });
+  const labelEl = el('label', {}, label);
+  const showExpr = () => { labelEl.textContent = expr ? `ƒ ${label}` : label; labelEl.title = expr || ''; };
+  showExpr();
   const clamp = (v) => {
     v = Math.min(max, Math.max(min, v));
     return integer ? Math.round(v) : v;
   };
-  const commit = (v) => {
+  const commit = (v, e = null) => {
     if (!Number.isFinite(v)) { input.value = fmt(value); return; }
     v = clamp(v);
     value = v;
+    expr = e;
     input.value = fmt(v);
-    onChange(v);
+    showExpr();
+    onChange(v, e);
   };
-  input.addEventListener('change', () => commit(evalExpr(input.value)));
+  input.addEventListener('change', () => {
+    const raw = input.value.trim();
+    const vs = vars?.() || {};
+    const usesVar = Object.keys(vs).some((k) => identifiers(raw).includes(k));
+    commit(evalExpr(raw, vs), usesVar ? raw : null);
+  });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
-  input.addEventListener('focus', () => setTimeout(() => input.select(), 0));
+  input.addEventListener('focus', () => { if (expr) input.value = expr; setTimeout(() => input.select(), 0); });
+  input.addEventListener('blur', () => { if (expr && input.value === expr) input.value = fmt(value); });
   const stepBy = (dir) => commit(Math.round((value + dir * step) / step) * step);
-  return el('div', { class: 'num ' + axis },
+  return el('div', { class: 'num ' + axis + (expr ? ' has-expr' : '') },
     el('button', { type: 'button', 'aria-label': label + ' を減らす', onclick: () => stepBy(-1) }, '−'),
-    el('label', {}, label),
+    labelEl,
     input,
     el('button', { type: 'button', 'aria-label': label + ' を増やす', onclick: () => stepBy(1) }, '+'),
   );
 }
 
-// Allows simple arithmetic like "20+3.5" or "40/2" in numeric fields.
-export function evalExpr(s) {
-  s = String(s).replace(/,/g, '.').replace(/[×x＊]/g, '*').replace(/[÷／]/g, '/').replace(/[−ー]/g, '-').trim();
+const IDENT = /[A-Za-z_぀-ヿ一-鿿][\w぀-ヿ一-鿿]*/g;
+const identifiers = (s) => String(s).match(IDENT) || [];
+
+// Allows simple arithmetic like "20+3.5" or "40/2" in numeric fields, and variable
+// names from `vars` (e.g. "壁厚*2+1").
+export function evalExpr(s, vars = null) {
+  s = String(s);
+  if (vars) s = s.replace(IDENT, (id) => (Object.prototype.hasOwnProperty.call(vars, id) ? `(${Number(vars[id])})` : id));
+  s = s.replace(/,/g, '.').replace(/[×x＊]/g, '*').replace(/[÷／]/g, '/').replace(/[−ー]/g, '-').trim();
   if (!/^[\d+\-*/().\s]+$/.test(s)) return NaN;
   try {
     // eslint-disable-next-line no-new-func

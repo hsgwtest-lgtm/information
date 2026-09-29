@@ -7,6 +7,15 @@ import {
   SphereGeometry, Line,
 } from '../vendor/vendor.js';
 import { nodeGeometry, nodeMatrix } from './geometry.js';
+import { edgeLines } from './pro/edges.js';
+
+// Boolean results contain triangulation seams that EdgesGeometry would draw; groups
+// (and other CSG-built parts) use the seam-free extractor instead.
+const CSG_KINDS = new Set(['group', 'bolt', 'nut']);
+function outlineGeometry(n, geo) {
+  const tris = geo.getAttribute('position').count / 3;
+  return CSG_KINDS.has(n.kind) && tris < 200000 ? edgeLines(geo, 30) : new EdgesGeometry(geo, 30);
+}
 
 export class Viewport {
   constructor(canvas, handlers) {
@@ -149,7 +158,7 @@ export class Viewport {
         const mesh = new Mesh(geo);
         mesh.matrixAutoUpdate = false;
         mesh.userData.id = n.id;
-        const edges = new LineSegments(new EdgesGeometry(geo, 30), this.materials.edge);
+        const edges = new LineSegments(outlineGeometry(n, geo), this.materials.edge);
         edges.matrixAutoUpdate = false;
         entry = { mesh, edges, geo };
         this.meshes.set(n.id, entry);
@@ -157,7 +166,7 @@ export class Viewport {
       } else if (entry.geo !== geo) {
         entry.mesh.geometry = geo;
         entry.edges.geometry.dispose();
-        entry.edges.geometry = new EdgesGeometry(geo, 30);
+        entry.edges.geometry = outlineGeometry(n, geo);
         entry.geo = geo;
       }
       entry.mesh.material = n.hole ? this.materials.hole : this.colorMat(n.color);

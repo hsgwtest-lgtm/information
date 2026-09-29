@@ -15,18 +15,22 @@ import * as license from './license.js';
 import * as pro from './pro/features.js';
 import { ISO } from './pro/threads.js';
 import { build3mf, buildObj } from './pro/export3mf.js';
+import * as adv from './pro/advanced.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const COLORS = ['#4f9dff', '#ffb020', '#ef5f56', '#57c26a', '#b07cff', '#f2f2f2', '#40464f', '#ff8ad8'];
 const SNAPS = [0.1, 0.5, 1, 5, 10];
 const MATERIALS = [['PLA', 1.24], ['PETG', 1.27], ['ABS', 1.04], ['ASA', 1.07], ['TPU', 1.21], ['レジン', 1.15]];
 const ADD_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'prism', 'torus', 'wedge', 'text', 'extrude', 'revolve'];
 // [label, icon, feature name for the paywall, action]
 const PRO_TOOLS = [
+  ['テンプレート', 'template', 'テンプレート集', () => adv.templatesDialog()],
+  ['マイパーツ', 'library', 'マイパーツ', () => adv.libraryDialog()],
   ['ボルト', 'bolt', 'ねじ・ボルト', () => pro.addBolt('bolt')],
   ['ナット', 'nut', 'ねじ・ナット', () => pro.addBolt('nut')],
   ['ねじ穴', 'tap', 'ねじ穴', () => pro.addBolt('tap')],
   ['歯車', 'gear', '歯車ジェネレーター', () => addNode('gear')],
+  ['面取り箱', 'cbox', '面取り箱', () => addNode('cbox')],
   ['ケース', 'case', 'ケース自動設計', () => pro.enclosureDialog()],
   ['日本語', 'jtext', '日本語テキスト', () => pro.jpTextDialog()],
   ['画像/SVG', 'image', '画像・SVG から立体化', () => pro.imageDialog()],
@@ -144,7 +148,9 @@ function freeSpot(n) {
   const y = Math.ceil((all.max.y + 5 + d / 2) / 5) * 5;
   if (y + d / 2 <= S.plate.y / 2) { n.pos[0] = 0; n.pos[1] = y; return; }
   const y2 = Math.floor((all.min.y - 5 - d / 2) / 5) * 5;
-  if (y2 - d / 2 >= -S.plate.y / 2) { n.pos[0] = 0; n.pos[1] = y2; }
+  if (y2 - d / 2 >= -S.plate.y / 2) { n.pos[0] = 0; n.pos[1] = y2; return; }
+  // Plate is full: never stack parts; place beside everything (flagged as outside the area).
+  n.pos[0] = x;
 }
 
 function addNode(kind, extra) {
@@ -441,8 +447,16 @@ function renderSheet() {
     actionBtn('ミラー', 'mirror', mirrorMenu),
   );
   if (!single) acts.append(actionBtn('整列', 'align', alignDialog));
-  if (single) acts.append(actionBtn('自動向き', 'orient', gated('自動向き最適化', pro.autoOrient)));
+  if (single) {
+    acts.append(
+      actionBtn('自動向き', 'orient', gated('自動向き最適化', pro.autoOrient)),
+      actionBtn('分割', 'split', gated('分割（ダボ付き）', adv.splitDialog)),
+      actionBtn('パターン穴', 'pattern', gated('パターン穴あけ', adv.patternDialog)),
+      actionBtn('面に配置', 'place', gated('面に配置', adv.startPlace)),
+    );
+  }
   acts.append(
+    actionBtn('マイパーツ', 'library', gated('マイパーツ', adv.saveToLibrary)),
     actionBtn('配列', 'array', arrayDialog),
     actionBtn('削除', 'trash', cmd.remove, { danger: true }),
   );
@@ -463,16 +477,23 @@ function section(title, ...children) {
   return el('div', { class: 'sec' }, h, ...children);
 }
 
+// Design variables (Pro): numeric fields accept formulas using them.
+const varsFn = () => (license.isPro() ? S.doc.vars || {} : {});
+function setExpr(n, key, e) {
+  if (e) { n.exprs = n.exprs || {}; n.exprs[key] = e; return; }
+  if (n.exprs) { delete n.exprs[key]; if (!Object.keys(n.exprs).length) delete n.exprs; }
+}
+
 function renderProps(ns) {
   const props = $('props');
   const scrollTop = props.scrollTop;
   props.replaceChildren();
-  const edit = (key, fn) => (v) => { checkpoint(key); fn(v); commit(); };
+  const edit = (key, fn) => (...args) => { checkpoint(key); fn(...args); commit(); };
   // Shape edits keep a part that sits on the plate sitting on the plate.
-  const editShape = (key, fn) => (v) => {
+  const editShape = (key, fn) => (...args) => {
     checkpoint(key);
     const onFloor = ns.length === 1 && Math.abs(vp.nodeBox(ns[0]).min.z) < 0.01;
-    fn(v);
+    fn(...args);
     if (onFloor) dropToFloor(ns[0]);
     commit();
   };
@@ -558,8 +579,8 @@ function renderProps(ns) {
       const integer = opt?.int || k === 'seg' || k === 'n';
       rows.append(numField({
         label: label + (integer || k === 'angle' || k === 'm' ? '' : ' mm'), value: n.params[k], step: integer ? (k === 'seg' ? 8 : 1) : step, min, integer,
-        max: k === 'angle' ? 360 : Infinity,
-        onChange: editShape('p.' + k, (v) => { n.params[k] = v; }),
+        max: k === 'angle' ? 360 : Infinity, expr: n.exprs?.[k], vars: varsFn,
+        onChange: editShape('p.' + k, (v, e) => { n.params[k] = v; setExpr(n, k, e); }),
       }));
     }
     props.append(section(PARAM_SIZED.has(n.kind) ? '寸法' : '形状', rows));
@@ -586,8 +607,8 @@ function renderProps(ns) {
   // position
   const b = vp.nodeBox(n);
   props.append(section(`位置 (mm) ・ 底面 Z=${fmt(round(b.min.z))}`, el('div', { class: 'row' }, ['x', 'y', 'z'].map((ax, i) => numField({
-    label: ax.toUpperCase(), axis: ax, value: n.pos[i], step: S.snap,
-    onChange: edit('pos' + i, (v) => { n.pos[i] = v; }),
+    label: ax.toUpperCase(), axis: ax, value: n.pos[i], step: S.snap, expr: n.exprs?.['pos' + i], vars: varsFn,
+    onChange: edit('pos' + i, (v, e) => { n.pos[i] = v; setExpr(n, 'pos' + i, e); }),
   })))));
 
   // rotation
@@ -923,11 +944,27 @@ async function projectMenu(p) {
 async function settingsDialog() {
   const plate = { ...S.plate };
   let density = S.density;
+  let printer = store.getSetting('printer', 'custom');
   const matSeg = segmented(MATERIALS.map(([n, d]) => [d, n]), density, (v) => { density = v; });
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const plateRow = el('div', { class: 'row' });
+  const renderPlate = () => plateRow.replaceChildren(...['x', 'y', 'z'].map((ax) => numField({
+    label: ax.toUpperCase(), axis: ax, value: plate[ax], min: 10, step: 10, onChange: (v) => { plate[ax] = v; printer = 'custom'; printerSel.value = 'custom'; },
+  })));
+  // Printer profiles (Pro) fill in the build volume and the speed used for estimates.
+  const printerSel = el('select', {
+    class: 'txt',
+    onchange: async (e) => {
+      const p = adv.PRINTERS.find(([id]) => id === e.target.value);
+      if (p[2] && !(await license.requirePro('プリンター別プロファイル'))) { e.target.value = printer; return; }
+      printer = p[0];
+      if (p[2]) { Object.assign(plate, { x: p[2].x, y: p[2].y, z: p[2].z }); renderPlate(); }
+    },
+  }, adv.PRINTERS.map(([id, label]) => el('option', { value: id, selected: id === printer }, label)));
+  renderPlate();
   const body = [
-    el('div', { class: 'field' }, el('span', {}, '造形エリア (mm)'), el('div', { class: 'row' },
-      ['x', 'y', 'z'].map((ax) => numField({ label: ax.toUpperCase(), axis: ax, value: plate[ax], min: 10, step: 10, onChange: (v) => { plate[ax] = v; } })))),
+    el('div', { class: 'field' }, el('span', {}, 'プリンター（Pro: 機種を選ぶと造形エリアと見積もり速度を自動設定）'), printerSel),
+    el('div', { class: 'field' }, el('span', {}, '造形エリア (mm)'), plateRow),
     el('div', { class: 'field' }, el('span', {}, '材料（重量の見積もり用）'), matSeg),
     standalone ? null : el('div', { class: 'warnbox' }, 'Safari の共有ボタン →「ホーム画面に追加」でアプリとして使えます（オフライン対応）。'),
     el('button', { type: 'button', class: 'btn', style: { width: '100%' }, onclick: () => { closeDialog(); license.planDialog(); } },
@@ -937,7 +974,9 @@ async function settingsDialog() {
   const v = await openDialog({ title: '設定', body, buttons: [{ label: 'キャンセル', value: 'cancel' }, { label: '保存', value: 'ok', cls: 'accent' }] });
   if (v !== 'ok') return;
   S.plate = plate; S.density = density;
-  store.setSetting('plate', plate); store.setSetting('density', density);
+  store.setSetting('plate', plate); store.setSetting('density', density); store.setSetting('printer', printer);
+  const prof = adv.PRINTERS.find(([id]) => id === printer)?.[2];
+  if (prof) store.setSetting('print', { ...store.getSetting('print', {}), speed: prof.speed });
   vp.setPlate(plate);
   updateInfo();
 }
@@ -946,6 +985,7 @@ async function settingsDialog() {
 let dragStart = null;
 const viewportHandlers = {
   onTap(id, hit, e) {
+    if (adv.placeTap(hit)) return;
     if (pro.measureTap(hit, e)) return;
     if (!id) {
       if (S.sel.length) { S.sel = []; commit(); }
@@ -978,6 +1018,9 @@ function updateToolBar() {
   const bar = $('toolbar');
   bar.replaceChildren();
   const close = (fn) => el('button', { type: 'button', class: 'chip', 'aria-label': '終了', onclick: fn }, icon('close'));
+  if (adv.placeState()) {
+    bar.append(el('div', { class: 'tb-row' }, icon('place'), el('span', { class: 'tb-text' }, '置きたい面をタップ'), close(adv.stopPlace)));
+  }
   if (pro.measuring()) {
     bar.append(el('div', { class: 'tb-row' }, icon('measure'), el('span', { class: 'tb-text' }, pro.measureText()), close(pro.stopMeasure)));
   }
@@ -1005,6 +1048,9 @@ async function init() {
   vp.setPlate(S.plate);
   pro.initFeatures({
     S, vp, addNode, commit, checkpoint, selNodes, dropToFloor, freeSpot, rotMatrix, eulerDeg, selectionBox, saveNow, openProject, updateToolBar,
+  });
+  adv.initAdvanced({
+    S, vp, commit, checkpoint, selNodes, dropToFloor, freeSpot, rotMatrix, eulerDeg, selectionBox, saveNow, openProject, updateToolBar,
   });
   license.onChange(() => { updatePlanChip(); if (!S.sel.length) renderAddTray(); });
   await license.refresh();
@@ -1065,6 +1111,9 @@ async function init() {
     const all = await store.listProjects();
     await openProject(all[0]?.id || await newProject());
   }
+  // A project sent with a share link (#share=…) opens as a new copy.
+  await adv.importFromHash();
+  window.addEventListener('hashchange', () => adv.importFromHash());
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));

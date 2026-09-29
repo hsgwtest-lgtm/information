@@ -1,7 +1,9 @@
 // Pro feature UI: parametric parts, image/text tools, analysis, versions.
 // `app` is the small API main.js exposes (state, node helpers, viewport).
 import { Matrix4, Vector3 } from '../../vendor/vendor.js';
-import { el, icon, toast, openDialog, closeDialog, numField, segmented, fmt, confirmDialog, promptDialog } from '../ui.js';
+import { el, icon, toast, openDialog, closeDialog, numField, segmented, fmt, confirmDialog, promptDialog, saveFile } from '../ui.js';
+import { buildDrawing } from './drawing.js';
+import * as adv from './advanced.js';
 import { nodeGeometry, nodeMatrix, geometryVolume, registerMeshData, defaultParams } from '../geometry.js';
 import { ISO } from './threads.js';
 import { gearInfo } from './gear.js';
@@ -434,16 +436,55 @@ export async function estimateDialog() {
 export async function toolsDialog() {
   const item = (ic, title, desc, fn) => el('button', { type: 'button', class: 'tool-row', onclick: () => { closeDialog(); fn(); } },
     icon(ic), el('div', {}, el('b', {}, title), el('span', {}, desc)));
+  const head = (t) => el('div', { class: 'sec-h', style: { margin: '10px 2px 2px' } }, el('span', {}, t));
   await openDialog({
-    title: '解析・印刷準備',
+    title: 'Pro ツール',
     body: el('div', { class: 'list' },
+      head('加工'),
+      item('split', '分割（ダボ付き）', '造形エリアに入らない部品を 2 つに分け、位置合わせピンを作成', adv.splitDialog),
+      item('pattern', 'パターン穴あけ', 'ハニカム・丸・角の穴を部品の形に合わせて並べる', adv.patternDialog),
+      item('place', '面に配置', '選択中の部品を、タップした面にぴったり載せる', adv.startPlace),
+      item('vars', '変数（寸法駆動）', '「壁厚」などの変数で複数の寸法をまとめて変更', () => adv.variablesDialog()),
+      head('印刷準備'),
       item('overhang', T.overhang ? 'オーバーハング表示を消す' : 'オーバーハングを表示', 'サポートが必要な面を赤く表示', () => toggleOverhang()),
       item('orient', '自動向き最適化', '選択中の部品を、サポートが最も少ない向きに回転', autoOrient),
+      item('arrange', '自動配置', '全部品を造形エリアに重ならないよう並べる', arrange),
+      item('clock', '印刷見積もり', '印刷時間・フィラメント量・材料費', estimateDialog),
+      head('確認・共有'),
       item('section', '断面表示', 'スライダーで切断位置を動かして内部を確認', startClip),
       item('measure', '距離を測る', '2 点間の距離と XYZ 各方向の差', startMeasure),
-      item('arrange', '自動配置', '全部品を造形エリアに重ならないよう並べる', arrange),
-      item('clock', '印刷見積もり', '印刷時間・フィラメント量・材料費', estimateDialog)),
+      item('drawing', '三面図（図面）を作る', '寸法入りの図面を SVG で出力。発注・打ち合わせに', drawingDialog),
+      item('share', '共有リンク', 'URL を送るだけで相手の端末にプロジェクトをコピー', adv.shareLinkDialog)),
   });
+}
+
+// ---------------------------------------------------------------- drawing
+export async function drawingDialog() {
+  const parts = solidParts(app.S.sel.length ? app.selNodes() : undefined);
+  if (!parts.length) { toast('図面にする部品がありません'); return; }
+  toast('図面を作成中…', 1200);
+  await new Promise((r) => setTimeout(r, 30));
+  const t0 = performance.now();
+  const r = buildDrawing(parts, { title: app.S.project.name });
+  const blob = new Blob([r.svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const d = document.getElementById('dlg');
+  const onClick = async (e) => {
+    const b = e.target.closest('button[type=submit]');
+    if (!b || (b.value !== 'dl' && b.value !== 'share')) return;
+    e.preventDefault();
+    const res = await saveFile(blob, `${app.S.project.name.replace(/[\\/:*?"<>|]/g, '_')}_図面.svg`, b.value === 'share');
+    if (res === 'shared' || res === 'downloaded') closeDialog('done');
+  };
+  d.addEventListener('click', onClick);
+  await openDialog({
+    title: '三面図',
+    body: [el('img', { src: url, alt: '三面図', class: 'drawing-preview' }),
+      el('p', { class: 'hint' }, `尺度 ${r.scale} ・ A4 横 ・ 第三角法 ・ ${Math.round(performance.now() - t0)} ms。隠れ線は破線で表示します。SVG は共有シートの「プリント」から PDF にもできます。`)],
+    buttons: [{ label: 'ダウンロード', value: 'dl' }, { label: '共有 / 保存', value: 'share', cls: 'accent' }],
+  });
+  d.removeEventListener('click', onClick);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ---------------------------------------------------------------- versions

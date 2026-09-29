@@ -1,7 +1,7 @@
 // IndexedDB persistence for projects, imported mesh blobs and version snapshots.
 // Pro uses its own database so it never disturbs the free app on the same origin.
 const DB_NAME = 'pocket-cad-pro';
-const DB_VER = 1;
+const DB_VER = 2; // v2: + library
 const FREE_DB = 'pocket-cad';
 const dbs = new Map();
 
@@ -27,6 +27,7 @@ const db = () => open(DB_NAME, DB_VER, (d) => {
   if (!d.objectStoreNames.contains('versions')) {
     d.createObjectStore('versions', { keyPath: 'id' }).createIndex('project', 'projectId');
   }
+  if (!d.objectStoreNames.contains('library')) d.createObjectStore('library', { keyPath: 'id' });
 });
 
 async function tx(store, mode, fn, database = db()) {
@@ -64,6 +65,15 @@ export const listVersions = async (projectId) => {
 export const getVersion = (id) => tx('versions', 'readonly', (s) => s.get(id));
 export const putVersion = (v) => tx('versions', 'readwrite', (s) => s.put(v));
 export const deleteVersion = (id) => tx('versions', 'readwrite', (s) => s.delete(id));
+
+// ---- my parts library (shared by all projects) ----
+export const listLibrary = async () => {
+  const all = await tx('library', 'readonly', (s) => s.getAll());
+  return (all || []).map(({ id, name, time, thumb }) => ({ id, name, time, thumb })).sort((a, b) => b.time - a.time);
+};
+export const getLibrary = (id) => tx('library', 'readonly', (s) => s.get(id));
+export const putLibrary = (item) => tx('library', 'readwrite', (s) => s.put(item));
+export const deleteLibrary = (id) => tx('library', 'readwrite', (s) => s.delete(id));
 
 // ---- read-only access to the free app's data (upgrade path) ----
 function freeDb() {

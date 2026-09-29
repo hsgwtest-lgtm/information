@@ -2,7 +2,7 @@
 // The prefix must not start with "pocket-cad-": the free app's worker deletes
 // every cache with that prefix on the same origin.
 const PREFIX = 'pcpro-';
-const VERSION = PREFIX + 'v1.0.0';
+const VERSION = PREFIX + 'v1.1.0';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,12 @@ const ASSETS = [
   './js/pro/lithophane.js',
   './js/pro/analysis.js',
   './js/pro/export3mf.js',
+  './js/pro/advanced.js',
+  './js/pro/templates.js',
+  './js/pro/pattern.js',
+  './js/pro/loft.js',
+  './js/pro/drawing.js',
+  './js/pro/edges.js',
   './vendor/vendor.js',
   './vendor/helvetiker_bold.typeface.json',
   './icons/icon-192.png',

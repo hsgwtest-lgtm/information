@@ -4,12 +4,13 @@
 import {
   BufferGeometry, Float32BufferAttribute, BoxGeometry, CylinderGeometry, SphereGeometry,
   TorusGeometry, ExtrudeGeometry, LatheGeometry, Shape, Path, Vector2, Matrix4, Euler,
-  MathUtils, ShapeUtils, TextGeometry, RoundedBoxGeometry, mergeVertices,
+  MathUtils, ShapeUtils, TextGeometry, RoundedBoxGeometry, mergeVertices, mergeGeometries,
   Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION,
 } from '../vendor/vendor.js';
 import { flattenSketch } from './bezier.js';
 import { ISO, SIZES, threadGeometry } from './pro/threads.js';
 import { gearOutline } from './pro/gear.js';
+import { loftGeometry, chamferBoxLayers } from './pro/loft.js';
 
 let font = null;
 export function setFont(f) { font = f; }
@@ -41,18 +42,25 @@ export const KINDS = {
   gear:     { label: '歯車', icon: 'gear', pro: true,
     params: [['m', 'モジュール', 1, 0.2, 0.1], ['z', '歯数', 20, 6, 1, { int: true }], ['h', '厚み', 6, 0.5, 1], ['bore', '軸穴径', 5, 0, 0.5], ['bl', 'バックラッシ', 0.1, 0, 0.05]] },
   outline:  { label: 'アウトライン', icon: 'image', pro: true, params: [['h', '厚み', 3, 0.1, 0.5]] },
+  cbox:     { label: '面取り箱', icon: 'cbox', pro: true,
+    params: [['w', '幅 X', 30, 0.1, 1], ['d', '奥行 Y', 20, 0.1, 1], ['h', '高さ Z', 10, 0.1, 1], ['r', '角R', 2, 0, 0.5], ['cb', '下面取り', 0.5, 0, 0.1], ['ct', '上面取り', 1, 0, 0.1]] },
+  // Internal kinds created by generators (templates, pattern tool).
+  loft:     { label: 'ロフト', icon: 'cbox', pro: true, params: [] },
+  pattern:  { label: 'パターン', icon: 'pattern', pro: true, params: [] },
   mesh:     { label: 'STL', icon: 'mesh', params: [] },
   group:    { label: 'グループ', icon: 'group', params: [] },
 };
 
 // Kinds whose size is controlled by params; everything else is sized via scale.
-export const PARAM_SIZED = new Set(['box', 'cylinder', 'cone', 'sphere', 'torus', 'tube', 'prism', 'wedge', 'bolt', 'nut', 'gear']);
+export const PARAM_SIZED = new Set(['box', 'cylinder', 'cone', 'sphere', 'torus', 'tube', 'prism', 'wedge', 'bolt', 'nut', 'gear', 'cbox']);
 
 export function defaultParams(kind) {
   const p = {};
   for (const [k, , def] of KINDS[kind].params) p[k] = def;
   for (const [k, , , def] of KINDS[kind].select || []) p[k] = def;
   if (kind === 'outline') p.shapes = [];
+  if (kind === 'loft') p.layers = chamferBoxLayers({ w: 20, d: 20, h: 10 });
+  if (kind === 'pattern') Object.assign(p, { shape: 'hex', size: 6, depth: 10, pts: [] });
   if (kind === 'text') p.text = 'Hello';
   if (kind === 'extrude' || kind === 'revolve') p.curves = null;
   if (kind === 'extrude') p.pts = [[-10, -10], [10, -10], [10, 10], [-10, 10]];
@@ -188,9 +196,30 @@ function primitive(kind, p) {
       if (!shapes.length) return new BoxGeometry(1, 1, 1);
       return centered(new ExtrudeGeometry(shapes, { depth: p.h, bevelEnabled: false }));
     }
+    case 'cbox': return centered(loftGeometry(chamferBoxLayers(p)) || new BoxGeometry(1, 1, 1));
+    case 'loft': return centered(loftGeometry(p.layers || []) || new BoxGeometry(1, 1, 1));
+    case 'pattern': return patternGeometry(p);
     default:
       return new BoxGeometry(10, 10, 10);
   }
+}
+
+// Many identical prisms merged into one mesh (disjoint solids), used as a single hole.
+// Pattern points are stored in the node's local frame, so the node stays where it was placed.
+function patternGeometry(p) {
+  if (!p.pts?.length) return new BoxGeometry(0.01, 0.01, 0.01);
+  let proto;
+  if (p.shape === 'square') proto = new BoxGeometry(p.size, p.size, p.depth);
+  else if (p.shape === 'circle') proto = yUpToZUp(new CylinderGeometry(p.size / 2, p.size / 2, p.depth, 24));
+  else {
+    // Hex given across flats, corners on ±X (flat top/bottom) to match pro/pattern.js packing.
+    const rc = p.size / Math.sqrt(3);
+    const hex = new Shape(Array.from({ length: 6 }, (_, k) => new Vector2(rc * Math.cos(k * Math.PI / 3), rc * Math.sin(k * Math.PI / 3))));
+    proto = new ExtrudeGeometry(hex, { depth: p.depth, bevelEnabled: false }).translate(0, 0, -p.depth / 2);
+  }
+  const base = proto.toNonIndexed();
+  for (const k of Object.keys(base.attributes)) if (k !== 'position') base.deleteAttribute(k);
+  return mergeGeometries(p.pts.map(([x, y]) => base.clone().translate(x, y, 0)));
 }
 
 function centered(g) {
