@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Pocket CAD Pro">
   <meta name="theme-color" content="#15181d">
-  <meta name="description" content="iPhone で使える 3D プリント用モデリング PWA のプロ版。ねじ・歯車・日本語文字・3MF 出力に対応。">
+  <meta name="description" content="iPhone で使える 3D プリント用モデリング PWA。トポロジー最適化・向きの最適化・詰め込み配置、ねじ・歯車・日本語文字・3MF 出力に対応。">
   <title>Pocket CAD Pro</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png">
@@ -20,7 +20,6 @@
     <header id="topbar">
       <button class="icon-btn" id="btn-projects" aria-label="プロジェクト"><svg><use href="#i-menu"/></svg></button>
       <button id="project-name" class="title-btn" aria-label="プロジェクト名を変更">無題</button>
-      <button id="btn-plan" class="plan-chip" aria-label="プラン"><svg><use href="#i-crown"/></svg></button>
       <button class="icon-btn" id="btn-undo" aria-label="元に戻す"><svg><use href="#i-undo"/></svg></button>
       <button class="icon-btn" id="btn-redo" aria-label="やり直し"><svg><use href="#i-redo"/></svg></button>
       <button class="primary-btn" id="btn-export"><svg><use href="#i-download"/></svg>出力</button>
@@ -97,11 +96,9 @@
       <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
       <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
       <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></symbol>
-      <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/><path d="M5 19h14"/><circle cx="3" cy="7.5" r="1.2"/><circle cx="12" cy="4.5" r="1.2"/><circle cx="21" cy="7.5" r="1.2"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5 10 17 19 7"/></symbol>
-      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
-      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M15 8l2 2"/></symbol>
-      <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
+      <symbol id="i-topo" viewBox="0 0 24 24"><path d="M3.5 3v18"/><path d="M3.5 5c6 .6 10.5 4 14.2 9.3M3.5 19c5.2-.6 9.7-2.2 14.2-4.7"/><path d="M3.5 5 10 17.4M10 17.4l2.6-7.2M12.6 10.2l2.9 5.3"/><circle cx="18.6" cy="15" r="2.2"/></symbol>
+      <symbol id="i-fill" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="6" y="6" width="5" height="5" rx="1"/><rect x="13" y="6" width="5" height="5" rx="1"/><rect x="6" y="13" width="5" height="5" rx="1"/><rect x="13" y="13" width="5" height="5" rx="1" stroke-dasharray="2 1.5"/></symbol>
       <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M7 3h10l2 3-2 3H7L5 6z"/><path d="M9 9v12h6V9M9 12l6-1.5M9 15l6-1.5M9 18l6-1.5"/></symbol>
       <symbol id="i-nut" viewBox="0 0 24 24"><path d="M7 4h10l5 8-5 8H7l-5-8z"/><circle cx="12" cy="12" r="3.5"/></symbol>
       <symbol id="i-tap" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 7v10M15 7v10M9 9l6-1.5M9 12l6-1.5M9 15l6-1.5" stroke-dasharray="2 1.5"/></symbol>

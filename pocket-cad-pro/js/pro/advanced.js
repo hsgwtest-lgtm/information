@@ -390,7 +390,7 @@ export async function shareLinkDialog() {
   const url = `${location.origin}${location.pathname}#share=${b64url(packed)}`;
   const kb = (url.length / 1024).toFixed(1);
   const body = [
-    el('p', {}, '相手がこのリンクを開くと、このプロジェクトのコピーが相手の端末に作られます（相手が無料プランでも閲覧・STL 出力ができます）。'),
+    el('p', {}, '相手がこのリンクを開くと、このプロジェクトのコピーが相手の端末に作られ、そのまま編集・出力できます。'),
     el('p', { class: 'hint' }, `リンクの長さ: ${kb} KB`),
     hasMesh ? el('div', { class: 'warnbox' }, '読み込んだ STL・リトフェインはリンクに含まれません（プロジェクトファイルで共有してください）。') : null,
     url.length > 60000 ? el('div', { class: 'warnbox' }, 'リンクが長いため、アプリによっては送れない場合があります。') : null,

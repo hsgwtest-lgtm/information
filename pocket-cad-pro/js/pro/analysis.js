@@ -1,5 +1,6 @@
-// Printability analysis: overhangs, orientation search and print time / cost estimates.
-import { Matrix4, Vector3 } from '../../vendor/vendor.js';
+// Printability analysis: overhangs and print time / cost estimates
+// (the orientation search lives in orient.js).
+import { Vector3 } from '../../vendor/vendor.js';
 
 const OVERHANG_COS = Math.cos(Math.PI / 4); // faces within 45° of facing straight down
 
@@ -36,38 +37,6 @@ export function overhangs(parts, floorZ = 0) {
     out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
   });
   return { positions: new Float32Array(out), area, contact, surface };
-}
-
-// The 24 axis-aligned rotations.
-function cubeRotations() {
-  const res = [];
-  const axes = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
-  for (const x of axes) for (const y of axes) {
-    if (x[0] * y[0] + x[1] * y[1] + x[2] * y[2] !== 0) continue;
-    const z = [x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0]];
-    res.push(new Matrix4().set(x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0, 0, 0, 0, 1));
-  }
-  return res;
-}
-
-// Finds the orientation (applied on top of `rotation`) with the least support.
-// Returns { matrix (extra world rotation), before, after } overhang areas in mm².
-export function bestOrientation(geometry, rotation) {
-  let best = null, before = null;
-  for (const C of cubeRotations()) {
-    const m = C.clone().multiply(rotation);
-    let zmin = Infinity, zmax = -Infinity;
-    const p = geometry.getAttribute('position').array;
-    const v = new Vector3();
-    for (let i = 0; i < p.length; i += 3) { v.set(p[i], p[i + 1], p[i + 2]).applyMatrix4(m); zmin = Math.min(zmin, v.z); zmax = Math.max(zmax, v.z); }
-    const r = overhangs([{ geometry, matrix: m }], zmin);
-    // Less overhang first; then a larger footprint (better adhesion) and a lower part.
-    const score = r.area - 0.25 * r.contact + 0.02 * (zmax - zmin);
-    const isIdentity = C.elements.every((e, i) => e === [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1][i]);
-    if (isIdentity) before = r.area;
-    if (!best || score < best.score - 1e-6) best = { score, matrix: C, after: r.area };
-  }
-  return { matrix: best.matrix, before, after: best.after };
 }
 
 export const PRINT_DEFAULTS = { layer: 0.2, infill: 15, walls: 2, line: 0.45, speed: 60, price: 2500 };
