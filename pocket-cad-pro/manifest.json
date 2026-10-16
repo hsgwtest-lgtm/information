@@ -1,7 +1,7 @@
 {
   "name": "Pocket CAD Pro - 出先で3D設計",
   "short_name": "CAD Pro",
-  "description": "iPhone で使える 3D プリント用モデリングアプリのプロ版。ねじ・歯車・日本語文字・3MF 出力に対応。",
+  "description": "iPhone で使える 3D プリント用モデリングアプリ。トポロジー最適化・向きの最適化・詰め込み配置、ねじ・歯車・日本語文字・3MF 出力に対応。",
   "id": "./",
   "start_url": "./",
   "scope": "./",

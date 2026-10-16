@@ -1,15 +1,18 @@
-// Pro feature UI: parametric parts, image/text tools, analysis, versions.
+// Feature UI: parametric parts, image/text tools, analysis, versions.
 // `app` is the small API main.js exposes (state, node helpers, viewport).
 import { Matrix4, Vector3 } from '../../vendor/vendor.js';
 import { el, icon, toast, openDialog, closeDialog, numField, segmented, fmt, confirmDialog, promptDialog, saveFile } from '../ui.js';
 import { buildDrawing } from './drawing.js';
 import * as adv from './advanced.js';
+import { topologyDialog } from './topology.js';
+import { orientDialog } from './orient.js';
+import { nestDialog } from './nest.js';
 import { nodeGeometry, nodeMatrix, geometryVolume, registerMeshData, defaultParams } from '../geometry.js';
 import { ISO } from './threads.js';
 import { gearInfo } from './gear.js';
 import { textToShapes, imageToShapes, svgToShapes, loadImage, countPoints, FONTS } from './trace.js';
 import { lithophaneMesh } from './lithophane.js';
-import { overhangs, bestOrientation, estimatePrint, formatDuration, PRINT_DEFAULTS } from './analysis.js';
+import { overhangs, estimatePrint, formatDuration, PRINT_DEFAULTS } from './analysis.js';
 import * as store from '../storage.js';
 
 let app;
@@ -60,6 +63,9 @@ export function propsExtras(n) {
   }
   if (n.kind === 'outline' && n.params.src?.type === 'jtext') {
     out.push(el('button', { type: 'button', class: 'btn', style: { width: '100%' }, onclick: () => jpTextDialog(n) }, icon('edit'), '文字を編集'));
+  }
+  if (n.topo && app.S.doc.nodes.includes(n)) {
+    out.push(el('button', { type: 'button', class: 'btn', style: { width: '100%', marginBottom: '6px' }, onclick: () => topologyDialog(n) }, icon('topo'), '条件を変えて再最適化'));
   }
   return out;
 }
@@ -294,44 +300,6 @@ export function toggleOverhang(on = !T.overhang) {
   app.updateToolBar();
 }
 
-export function autoOrient() {
-  const ns = app.selNodes();
-  if (ns.length !== 1) { toast('部品を 1 つ選択してください'); return; }
-  const n = ns[0];
-  const R = app.rotMatrix(n.rot);
-  const r = bestOrientation(nodeGeometry(n), R);
-  if (r.after >= r.before - 0.5) { toast(`今の向きが最適です（オーバーハング ${fmt(Math.round(r.before))} mm²）`, 2500); return; }
-  app.checkpoint();
-  n.rot = app.eulerDeg(r.matrix.clone().multiply(R));
-  app.dropToFloor(n);
-  app.commit();
-  toast(`オーバーハング ${fmt(Math.round(r.before))} → ${fmt(Math.round(r.after))} mm² に改善`, 3000);
-}
-
-export function arrange() {
-  const ns = app.S.doc.nodes.filter((n) => !n.hidden);
-  if (ns.length < 2) { toast('並べる部品が 2 つ以上必要です'); return; }
-  app.checkpoint();
-  const gap = 5, maxW = app.S.plate.x;
-  const items = ns.map((n) => ({ n, b: app.vp.nodeBox(n) })).sort((a, b) => (b.b.max.y - b.b.min.y) - (a.b.max.y - a.b.min.y));
-  let x = 0, y = 0, rowH = 0, width = 0;
-  for (const it of items) {
-    const w = it.b.max.x - it.b.min.x, d = it.b.max.y - it.b.min.y;
-    if (x > 0 && x + w > maxW) { x = 0; y += rowH + gap; rowH = 0; }
-    it.x = x; it.y = y;
-    x += w + gap; rowH = Math.max(rowH, d); width = Math.max(width, x - gap);
-  }
-  const height = y + rowH;
-  for (const it of items) {
-    it.n.pos[0] = round(it.n.pos[0] + (it.x - width / 2) - it.b.min.x);
-    it.n.pos[1] = round(it.n.pos[1] + (height / 2 - it.y) - it.b.max.y);
-    it.n.pos[2] = round(it.n.pos[2] - it.b.min.z);
-  }
-  app.commit();
-  app.vp.view('top');
-  toast(height > app.S.plate.y ? '造形エリアに収まりきりません（2 回に分けて印刷してください）' : `${items.length} 個を並べました`, 2500);
-}
-
 // ---- measuring ----
 export function startMeasure() {
   T.measure = [];
@@ -437,9 +405,15 @@ export async function toolsDialog() {
   const item = (ic, title, desc, fn) => el('button', { type: 'button', class: 'tool-row', onclick: () => { closeDialog(); fn(); } },
     icon(ic), el('div', {}, el('b', {}, title), el('span', {}, desc)));
   const head = (t) => el('div', { class: 'sec-h', style: { margin: '10px 2px 2px' } }, el('span', {}, t));
+  const one = app.selNodes().length === 1;
   await openDialog({
-    title: 'Pro ツール',
+    title: 'ツール',
     body: el('div', { class: 'list' },
+      head('最適化'),
+      item('topo', '形状の最適化（トポロジー）', '固定する所と力のかかる所から、必要な所だけ材料を残した軽くて強い形を自動で作る', () => topologyDialog()),
+      item('orient', '向きの最適化', one ? 'サポート量・印刷時間・接地面積を比べて、印刷しやすい置き方を選ぶ' : '部品を 1 つ選んでから使います', orientDialog),
+      item('arrange', '自動配置（詰め込み）', '上から見た実際の形で、回転も使って造形エリアに詰めて並べる', () => nestDialog()),
+      item('fill', '敷き詰め', one ? '選択中の部品を、造形エリアに入るだけ複製して並べる' : '部品を 1 つ選んでから使います', () => (one ? nestDialog('fill') : toast('敷き詰める部品を 1 つ選択してください'))),
       head('加工'),
       item('split', '分割（ダボ付き）', '造形エリアに入らない部品を 2 つに分け、位置合わせピンを作成', adv.splitDialog),
       item('pattern', 'パターン穴あけ', 'ハニカム・丸・角の穴を部品の形に合わせて並べる', adv.patternDialog),
@@ -447,8 +421,6 @@ export async function toolsDialog() {
       item('vars', '変数（寸法駆動）', '「壁厚」などの変数で複数の寸法をまとめて変更', () => adv.variablesDialog()),
       head('印刷準備'),
       item('overhang', T.overhang ? 'オーバーハング表示を消す' : 'オーバーハングを表示', 'サポートが必要な面を赤く表示', () => toggleOverhang()),
-      item('orient', '自動向き最適化', '選択中の部品を、サポートが最も少ない向きに回転', autoOrient),
-      item('arrange', '自動配置', '全部品を造形エリアに重ならないよう並べる', arrange),
       item('clock', '印刷見積もり', '印刷時間・フィラメント量・材料費', estimateDialog),
       head('確認・共有'),
       item('section', '断面表示', 'スライダーで切断位置を動かして内部を確認', startClip),

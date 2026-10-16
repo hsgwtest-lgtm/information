@@ -11,33 +11,34 @@ import {
   el, icon, toast, openDialog, closeDialog, confirmDialog, promptDialog, numField, segmented, saveFile, fmt,
 } from './ui.js';
 import { editSketch } from './sketch.js';
-import * as license from './license.js';
 import * as pro from './pro/features.js';
 import { ISO } from './pro/threads.js';
 import { build3mf, buildObj } from './pro/export3mf.js';
 import * as adv from './pro/advanced.js';
+import * as topo from './pro/topology.js';
+import * as orient from './pro/orient.js';
+import * as nest from './pro/nest.js';
 
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.0';
 const COLORS = ['#4f9dff', '#ffb020', '#ef5f56', '#57c26a', '#b07cff', '#f2f2f2', '#40464f', '#ff8ad8'];
 const SNAPS = [0.1, 0.5, 1, 5, 10];
 const MATERIALS = [['PLA', 1.24], ['PETG', 1.27], ['ABS', 1.04], ['ASA', 1.07], ['TPU', 1.21], ['レジン', 1.15]];
 const ADD_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'prism', 'torus', 'wedge', 'text', 'extrude', 'revolve'];
-// [label, icon, feature name for the paywall, action]
-const PRO_TOOLS = [
-  ['テンプレート', 'template', 'テンプレート集', () => adv.templatesDialog()],
-  ['マイパーツ', 'library', 'マイパーツ', () => adv.libraryDialog()],
-  ['ボルト', 'bolt', 'ねじ・ボルト', () => pro.addBolt('bolt')],
-  ['ナット', 'nut', 'ねじ・ナット', () => pro.addBolt('nut')],
-  ['ねじ穴', 'tap', 'ねじ穴', () => pro.addBolt('tap')],
-  ['歯車', 'gear', '歯車ジェネレーター', () => addNode('gear')],
-  ['面取り箱', 'cbox', '面取り箱', () => addNode('cbox')],
-  ['ケース', 'case', 'ケース自動設計', () => pro.enclosureDialog()],
-  ['日本語', 'jtext', '日本語テキスト', () => pro.jpTextDialog()],
-  ['画像/SVG', 'image', '画像・SVG から立体化', () => pro.imageDialog()],
-  ['リトフェイン', 'photo', 'リトフェイン', () => pro.lithophaneDialog()],
+// Design tools shown under the basic shapes: [label, icon, action]
+const DESIGN_TOOLS = [
+  ['形状最適化', 'topo', () => topo.topologyDialog()],
+  ['テンプレート', 'template', () => adv.templatesDialog()],
+  ['マイパーツ', 'library', () => adv.libraryDialog()],
+  ['ボルト', 'bolt', () => pro.addBolt('bolt')],
+  ['ナット', 'nut', () => pro.addBolt('nut')],
+  ['ねじ穴', 'tap', () => pro.addBolt('tap')],
+  ['歯車', 'gear', () => addNode('gear')],
+  ['面取り箱', 'cbox', () => addNode('cbox')],
+  ['ケース', 'case', () => pro.enclosureDialog()],
+  ['日本語', 'jtext', () => pro.jpTextDialog()],
+  ['画像/SVG', 'image', () => pro.imageDialog()],
+  ['リトフェイン', 'photo', () => pro.lithophaneDialog()],
 ];
-// Runs `fn` if Pro (or trial) is active, otherwise shows the plan screen.
-const gated = (feature, fn) => async () => { if (await license.requirePro(feature)) fn(); };
 
 const S = {
   project: null,
@@ -402,12 +403,8 @@ function renderAddTray() {
   }
   tray.append(el('button', { class: 'tool', onclick: () => pickFile('.stl,.json,model/stl,application/json') }, icon('import'), 'STL読込'));
   if (S.doc.nodes.length) tray.append(el('button', { class: 'tool', onclick: cmd.selectAll }, icon('multi'), '全選択'));
-  const locked = !license.isPro();
-  tray.append(el('div', { class: 'tray-h' }, el('span', { class: 'pro-tag' }, 'PRO'), locked ? 'タップで詳細・無料トライアル' : '設計ツール'));
-  for (const [label, ic, feature, fn] of PRO_TOOLS) {
-    tray.append(el('button', { class: 'tool pro' + (locked ? ' locked' : ''), onclick: gated(feature, fn) },
-      icon(ic), label, locked ? el('span', { class: 'lock' }, icon('lock')) : null));
-  }
+  tray.append(el('div', { class: 'tray-h' }, '設計ツール'));
+  for (const [label, ic, fn] of DESIGN_TOOLS) tray.append(el('button', { class: 'tool design', onclick: fn }, icon(ic), label));
 }
 
 async function addKind(k) {
@@ -449,14 +446,15 @@ function renderSheet() {
   if (!single) acts.append(actionBtn('整列', 'align', alignDialog));
   if (single) {
     acts.append(
-      actionBtn('自動向き', 'orient', gated('自動向き最適化', pro.autoOrient)),
-      actionBtn('分割', 'split', gated('分割（ダボ付き）', adv.splitDialog)),
-      actionBtn('パターン穴', 'pattern', gated('パターン穴あけ', adv.patternDialog)),
-      actionBtn('面に配置', 'place', gated('面に配置', adv.startPlace)),
+      actionBtn('向き最適化', 'orient', orient.orientDialog),
+      actionBtn('敷き詰め', 'fill', () => nest.nestDialog('fill')),
+      actionBtn('分割', 'split', adv.splitDialog),
+      actionBtn('パターン穴', 'pattern', adv.patternDialog),
+      actionBtn('面に配置', 'place', adv.startPlace),
     );
   }
   acts.append(
-    actionBtn('マイパーツ', 'library', gated('マイパーツ', adv.saveToLibrary)),
+    actionBtn('マイパーツ', 'library', adv.saveToLibrary),
     actionBtn('配列', 'array', arrayDialog),
     actionBtn('削除', 'trash', cmd.remove, { danger: true }),
   );
@@ -477,8 +475,8 @@ function section(title, ...children) {
   return el('div', { class: 'sec' }, h, ...children);
 }
 
-// Design variables (Pro): numeric fields accept formulas using them.
-const varsFn = () => (license.isPro() ? S.doc.vars || {} : {});
+// Design variables: numeric fields accept formulas using them.
+const varsFn = () => S.doc.vars || {};
 function setExpr(n, key, e) {
   if (e) { n.exprs = n.exprs || {}; n.exprs[key] = e; return; }
   if (n.exprs) { delete n.exprs[key]; if (!Object.keys(n.exprs).length) delete n.exprs; }
@@ -671,7 +669,6 @@ const FORMATS = [['stl', 'STL'], ['3mf', '3MF'], ['obj', 'OBJ']];
 async function exportDialog() {
   if (!S.doc.nodes.some((n) => !n.hidden && !n.hole)) { toast('出力できるソリッドがありません'); return; }
   const st = { scope: S.sel.length ? 'sel' : 'all', union: store.getSetting('exportUnion', true), format: store.getSetting('exportFormat', 'stl') };
-  if (st.format !== 'stl' && !license.isPro()) st.format = 'stl';
   let blob = null, token = 0;
   const fname = el('input', { class: 'txt', value: S.project.name.replace(/[\\/:*?"<>|]/g, '_'), enterkeyhint: 'done' });
   const stats = el('div');
@@ -722,15 +719,9 @@ async function exportDialog() {
         el('dt', {}, '部品 / 三角形'), el('dd', {}, `${nodes.length} / ${tris.toLocaleString()}`),
         el('dt', {}, 'ファイル'), el('dd', {}, `${(blob.size / 1024).toFixed(0)} KB ・ ${(performance.now() - t).toFixed(0)} ms`)),
       ...warns.map((x) => el('div', { class: 'warnbox' }, x)));
-    if (license.isPro()) {
-      est.append(el('div', { class: 'sec-h', style: { marginTop: '8px' } }, el('span', {}, '印刷見積もり')), pro.estimateSection(parts, S.density));
-    } else {
-      est.append(el('button', { type: 'button', class: 'btn', style: { width: '100%' }, onclick: gated('印刷時間・コスト見積もり', () => {}) },
-        icon('clock'), '印刷時間・材料費を見積もる', el('span', { class: 'pro-tag' }, 'PRO')));
-    }
+    est.append(el('div', { class: 'sec-h', style: { marginTop: '8px' } }, el('span', {}, '印刷見積もり')), pro.estimateSection(parts, S.density));
   };
-  const formatSeg = el('div', { class: 'field' }, el('span', {}, '形式（3MF / OBJ は Pro）'), segmented(FORMATS, st.format, async (v) => {
-    if (v !== 'stl' && !(await license.requirePro('3MF / OBJ 出力'))) { exportDialog(); return; }
+  const formatSeg = el('div', { class: 'field' }, el('span', {}, '形式'), segmented(FORMATS, st.format, (v) => {
     st.format = v; store.setSetting('exportFormat', v); prepare();
   }));
   const scopeSeg = S.sel.length
@@ -758,7 +749,7 @@ async function exportDialog() {
     if (r === 'shared' || r === 'downloaded') {
       closeDialog('done');
       toast(`${name} を保存しました`);
-      if (license.isPro()) pro.saveVersion(`${st.format.toUpperCase()} 出力 ${new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`, { quiet: true });
+      pro.saveVersion(`${st.format.toUpperCase()} 出力 ${new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`, { quiet: true });
     }
   };
   d.addEventListener('click', onClick);
@@ -898,11 +889,10 @@ async function projectsDialog() {
     el('button', { type: 'button', class: 'btn accent', onclick: async () => { closeDialog(); await openProject(await newProject()); } }, icon('plus'), '新規'),
     el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); pickFile('.json,.stl,application/json,model/stl'); } }, icon('import'), '読込'),
     el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); settingsDialog(); } }, icon('settings'), '設定'));
-  const proRow = el('div', { class: 'row', style: { marginBottom: '12px' } },
-    el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); gated('バージョン履歴', pro.versionsDialog)(); } }, icon('history'), '履歴'),
-    el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); gated('無料版から引き継ぎ', pro.importFreeDialog)(); } }, icon('import'), '無料版から'),
-    el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); license.planDialog(); } }, icon('star'), 'プラン'));
-  await openDialog({ title: 'プロジェクト', body: [top, proRow, list] });
+  const moreRow = el('div', { class: 'row two', style: { marginBottom: '12px' } },
+    el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); pro.versionsDialog(); } }, icon('history'), '履歴'),
+    el('button', { type: 'button', class: 'btn', onclick: () => { closeDialog(); pro.importFreeDialog(); } }, icon('import'), '無料版から'));
+  await openDialog({ title: 'プロジェクト', body: [top, moreRow, list] });
 }
 
 async function projectMenu(p) {
@@ -951,24 +941,21 @@ async function settingsDialog() {
   const renderPlate = () => plateRow.replaceChildren(...['x', 'y', 'z'].map((ax) => numField({
     label: ax.toUpperCase(), axis: ax, value: plate[ax], min: 10, step: 10, onChange: (v) => { plate[ax] = v; printer = 'custom'; printerSel.value = 'custom'; },
   })));
-  // Printer profiles (Pro) fill in the build volume and the speed used for estimates.
+  // Printer profiles fill in the build volume and the speed used for estimates.
   const printerSel = el('select', {
     class: 'txt',
-    onchange: async (e) => {
+    onchange: (e) => {
       const p = adv.PRINTERS.find(([id]) => id === e.target.value);
-      if (p[2] && !(await license.requirePro('プリンター別プロファイル'))) { e.target.value = printer; return; }
       printer = p[0];
       if (p[2]) { Object.assign(plate, { x: p[2].x, y: p[2].y, z: p[2].z }); renderPlate(); }
     },
   }, adv.PRINTERS.map(([id, label]) => el('option', { value: id, selected: id === printer }, label)));
   renderPlate();
   const body = [
-    el('div', { class: 'field' }, el('span', {}, 'プリンター（Pro: 機種を選ぶと造形エリアと見積もり速度を自動設定）'), printerSel),
+    el('div', { class: 'field' }, el('span', {}, 'プリンター（機種を選ぶと造形エリアと見積もり速度を自動設定）'), printerSel),
     el('div', { class: 'field' }, el('span', {}, '造形エリア (mm)'), plateRow),
-    el('div', { class: 'field' }, el('span', {}, '材料（重量の見積もり用）'), matSeg),
+    el('div', { class: 'field' }, el('span', {}, '材料（重量・強度の見積もり用）'), matSeg),
     standalone ? null : el('div', { class: 'warnbox' }, 'Safari の共有ボタン →「ホーム画面に追加」でアプリとして使えます（オフライン対応）。'),
-    el('button', { type: 'button', class: 'btn', style: { width: '100%' }, onclick: () => { closeDialog(); license.planDialog(); } },
-      icon('star'), `プラン: ${license.statusLabel()}`),
     el('p', { class: 'hint' }, `Pocket CAD Pro v${APP_VERSION} ・ three.js + three-bvh-csg`),
   ];
   const v = await openDialog({ title: '設定', body, buttons: [{ label: 'キャンセル', value: 'cancel' }, { label: '保存', value: 'ok', cls: 'accent' }] });
@@ -1035,30 +1022,20 @@ function updateToolBar() {
   bar.hidden = !bar.children.length;
 }
 
-function updatePlanChip() {
-  const st = license.getState();
-  const b = $('btn-plan');
-  // Crown only; the plan state is conveyed by style and the accessible label.
-  const label = st.tier === 'pro' ? 'Pro プラン' : st.tier === 'trial' ? `お試し中（残り ${st.daysLeft} 日）` : 'Pro を試す';
-  b.setAttribute('aria-label', label);
-  b.title = label;
-  b.classList.toggle('active', st.tier !== 'free');
-}
-
 // ---------------------------------------------------------------- boot
 async function init() {
   vp = new Viewport($('view'), viewportHandlers);
   vp.setPlate(S.plate);
-  pro.initFeatures({
+  // The small API the feature modules work through.
+  const api = {
     S, vp, addNode, commit, checkpoint, selNodes, dropToFloor, freeSpot, rotMatrix, eulerDeg, selectionBox, saveNow, openProject, updateToolBar,
-  });
-  adv.initAdvanced({
-    S, vp, commit, checkpoint, selNodes, dropToFloor, freeSpot, rotMatrix, eulerDeg, selectionBox, saveNow, openProject, updateToolBar,
-  });
-  license.onChange(() => { updatePlanChip(); if (!S.sel.length) renderAddTray(); });
-  await license.refresh();
-  $('btn-plan').onclick = () => license.planDialog();
-  $('btn-tools').onclick = gated('解析・印刷準備ツール', pro.toolsDialog);
+  };
+  pro.initFeatures(api);
+  adv.initAdvanced(api);
+  topo.initTopology(api);
+  orient.initOrient(api);
+  nest.initNest(api);
+  $('btn-tools').onclick = pro.toolsDialog;
 
   try {
     const res = await fetch('vendor/helvetiker_bold.typeface.json');
@@ -1104,7 +1081,7 @@ async function init() {
     else if (e.key === 'Shift') setMulti(true);
   });
   document.addEventListener('keyup', (e) => { if (e.key === 'Shift') setMulti(false); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); else license.refresh(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveNow(); });
   window.addEventListener('pagehide', saveNow);
   // iOS Safari still pinch-zooms the page in some cases despite the viewport meta.
   document.addEventListener('gesturestart', (e) => e.preventDefault());
