@@ -13,6 +13,8 @@ import { edgeLines } from './pro/edges.js';
 // (and other CSG-built parts) use the seam-free extractor instead.
 const CSG_KINDS = new Set(['group', 'bolt', 'nut']);
 function outlineGeometry(n, geo) {
+  // A lattice is all edges: outlining it would only paint it black.
+  if (n.lattice) return new BufferGeometry();
   const tris = geo.getAttribute('position').count / 3;
   return CSG_KINDS.has(n.kind) && tris < 200000 ? edgeLines(geo, 30) : new EdgesGeometry(geo, 30);
 }

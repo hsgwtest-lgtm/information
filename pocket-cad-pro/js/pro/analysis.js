@@ -2,7 +2,8 @@
 // (the orientation search lives in orient.js).
 import { Vector3 } from '../../vendor/vendor.js';
 
-const OVERHANG_COS = Math.cos(Math.PI / 4); // faces within 45° of facing straight down
+// Faces within 45° of facing straight down (a face at exactly 45° prints fine).
+const OVERHANG_COS = Math.cos(Math.PI / 4) + 1e-3;
 
 // Walks world-space triangles of (geometry, matrix) pairs.
 function forEachTri(parts, fn) {

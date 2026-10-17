@@ -58,6 +58,12 @@ export async function templatesDialog() {
   await openDialog({ title: 'テンプレート', body: [el('p', { class: 'hint' }, '寸法を入れるだけで、すぐ印刷できる形を作ります。作った後も部品単位で編集できます。'), list] });
 }
 
+// Opens one template's form directly (design-tool shortcuts).
+export function openTemplate(id) {
+  const t = TEMPLATES.find((x) => x.id === id);
+  if (t) templateParams(t);
+}
+
 async function templateParams(t) {
   const st = { ...Object.fromEntries(t.params.map(([k, , def]) => [k, def])), ...store.getSetting('tpl.' + t.id, {}) };
   if (t.text) { st.text = st.text || 'なまえ'; st.font = st.font || 'gothic'; }
@@ -362,7 +368,7 @@ export async function libraryDialog() {
         closeDialog();
         const full = await store.getLibrary(it.id);
         const meshIds = [];
-        const walk = (arr) => arr.forEach((n) => { if (n.kind === 'mesh') meshIds.push(n.dataId); if (n.children) walk(n.children); });
+        const walk = (arr) => arr.forEach((n) => { if (n.kind === 'mesh') meshIds.push(n.dataId); if (n.children) walk(n.children); if (n.src?.kind) walk([n.src]); });
         walk(full.nodes);
         for (const id of meshIds) if (!getMeshData(id)) { const d = await store.getMesh(id); if (d) registerMeshData(id, d); }
         insertBlock(full.nodes.map(deepClone), full.name);
@@ -392,7 +398,7 @@ export async function shareLinkDialog() {
   const body = [
     el('p', {}, '相手がこのリンクを開くと、このプロジェクトのコピーが相手の端末に作られ、そのまま編集・出力できます。'),
     el('p', { class: 'hint' }, `リンクの長さ: ${kb} KB`),
-    hasMesh ? el('div', { class: 'warnbox' }, '読み込んだ STL・リトフェインはリンクに含まれません（プロジェクトファイルで共有してください）。') : null,
+    hasMesh ? el('div', { class: 'warnbox' }, '読み込んだ STL・リトフェイン・格子・シェルの内側はリンクに含まれません（プロジェクトファイルで共有してください）。') : null,
     url.length > 60000 ? el('div', { class: 'warnbox' }, 'リンクが長いため、アプリによっては送れない場合があります。') : null,
   ];
   const d = document.getElementById('dlg');
