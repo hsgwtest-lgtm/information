@@ -526,7 +526,7 @@ function section(P, t, na, nb, p, K) {
   return ring;
 }
 
-// Relative growth of fillet arcs (see section) and the matching shrink of corner spheres.
+// Relative growth of fillet arcs (see section); network corners use the same radius.
 export const ARC_GROW = 0.005;
 
 // Sweep of the cross-section along a chain. p: { type: 'fillet' | 'chamfer', r, r2?,
@@ -582,7 +582,14 @@ export function filletSolid(p) {
 // that end the sweeps. Built as separate pieces (sweeps through the corner plus a box minus
 // a sphere), the boolean would see surfaces that merely touch and leave slivers.
 //
-// p: { r, chains: [{ pts, na, nb, c0, c1 }], corners: [{ V, u: [u1, u2, u3] }], ext?, eps? }
+// Two convex edges that turn around a concave one (the inside corner of an L) are joined
+// the way a rolling ball would do it: the profile of the first is swept around the
+// concave edge's fillet axis (or around the edge itself when it is not rounded) into the
+// profile of the second.
+//
+// p: { r, chains: [{ pts, na, nb, c0, c1 }], corners: [corner], ext?, eps? }
+// corner: { V, u: [u1, u2, u3] } (sphere) or { kind: 'joint', V, O, d, rc } (axis through O
+// along d; the chains stop rc short of V).
 // c0 / c1: index of the corner at the chain's first / last point, or -1 for a free end.
 export function blendSolid(p) {
   const r = p.r, K = arcSegments(r);
@@ -590,16 +597,22 @@ export function blendSolid(p) {
   const q = { ...p, type: 'fillet', concave: false, eps: p.eps ?? Math.max(0.05, 3 * r * ARC_GROW) };
   const tris = [];
   const ringsAt = p.corners.map(() => []);
+  const trimOf = (ci) => (p.corners[ci].kind === 'joint' ? p.corners[ci].rc : r);
   for (const ch of p.chains) {
     let pts = ch.pts.map((v) => [...v]), na = ch.na, nb = ch.nb;
-    // Cut the chain back to where each corner's sphere begins (r along the edge).
-    if (ch.c0 >= 0) ({ pts, na, nb } = trimChain(pts, na, nb, r));
-    if (ch.c1 >= 0) {
-      const rev = trimChain([...pts].reverse(), [...na].reverse(), [...nb].reverse(), r);
+    // Cut the chain back to where its corner begins (a sphere: r along the edge).
+    if (ch.c0 >= 0 && trimOf(ch.c0) > 0) ({ pts, na, nb } = trimChain(pts, na, nb, trimOf(ch.c0)));
+    if (ch.c1 >= 0 && trimOf(ch.c1) > 0) {
+      const rev = trimChain([...pts].reverse(), [...na].reverse(), [...nb].reverse(), trimOf(ch.c1));
       pts = rev.pts.reverse(); na = rev.na.reverse(); nb = rev.nb.reverse();
     }
     const m = pts.length;
-    const tan = pts.map((_, i) => (i === m - 1 ? norm(sub(pts[m - 1], pts[m - 2])) : norm(sub(pts[i + 1], pts[i]))));
+    if (m < 2) continue;
+    const tan = pts.map((_, i) => {
+      if (i === 0) return norm(sub(pts[1], pts[0]));
+      if (i === m - 1) return norm(sub(pts[m - 1], pts[m - 2]));
+      return norm(add(norm(sub(pts[i + 1], pts[i])), norm(sub(pts[i], pts[i - 1]))));
+    });
     const ext = p.ext ?? 0.05;
     if (ch.c0 < 0) pts[0] = sub(pts[0], mul(tan[0], ext));
     if (ch.c1 < 0) pts[m - 1] = add(pts[m - 1], mul(tan[m - 1], ext));
@@ -613,15 +626,56 @@ export function blendSolid(p) {
       }
     }
     const cap = (ring) => { for (let k = 1; k < R - 1; k++) tris.push([ring[0], ring[k + 1], ring[k]]); };
-    if (ch.c0 < 0) cap(rings[0]); else ringsAt[ch.c0].push(rings[0]);
-    if (ch.c1 < 0) cap(rings[m - 1]); else ringsAt[ch.c1].push(rings[m - 1]);
+    // Direction of the chain away from the corner, for joints.
+    if (ch.c0 < 0) cap(rings[0]); else ringsAt[ch.c0].push({ ring: rings[0], u: tan[0] });
+    if (ch.c1 < 0) cap(rings[m - 1]); else ringsAt[ch.c1].push({ ring: rings[m - 1], u: mul(tan[m - 1], -1) });
   }
   p.corners.forEach((c, ci) => {
-    const rings = ringsAt[ci];
-    if (rings.length !== 3) { for (const ring of rings) for (let k = 1; k < ring.length - 1; k++) tris.push([ring[0], ring[k + 1], ring[k]]); return; }
-    cornerPatch(c, r, rr, K, rings, tris);
+    const ends = ringsAt[ci];
+    const need = c.kind === 'joint' ? 2 : 3;
+    if (ends.length !== need) {
+      for (const { ring } of ends) for (let k = 1; k < ring.length - 1; k++) tris.push([ring[0], ring[k + 1], ring[k]]);
+      return;
+    }
+    if (c.kind === 'joint') jointSweep(c, ends, tris);
+    else cornerPatch(c, r, rr, K, ends.map((e) => e.ring), tris);
   });
   return orientedSoup(tris);
+}
+
+// Rotates point v about the axis through O along unit d by angle a (Rodrigues).
+function rotateAbout(v, O, d, a) {
+  const w = sub(v, O), c = Math.cos(a), s = Math.sin(a);
+  const kw = cross(d, w), kd = dot(d, w) * (1 - c);
+  return add(O, add(add(mul(w, c), mul(kw, s)), mul(d, kd)));
+}
+
+// Sweeps the first end ring around the joint's axis until it meets the second.
+function jointSweep(c, ends, tris) {
+  const [A, B] = ends;
+  const d = norm(c.d);
+  // Turn from "into the corner along the first chain" to "out along the second".
+  const from = mul(A.u, -1);
+  const a = Math.atan2(dot(cross(from, B.u), d), dot(from, B.u));
+  const n = Math.max(2, Math.ceil(Math.abs(a) / (Math.PI / 18)));
+  const rings = [A.ring];
+  for (let k = 1; k <= n; k++) rings.push(A.ring.map((v) => rotateAbout(v, c.O, d, (a * k) / n)));
+  // The last swept ring is where the second chain begins: give its ring those exact points
+  // (its triangles hold the same point objects, so they follow).
+  const last = rings[n];
+  for (const v of B.ring) {
+    let best = null, bd = Infinity;
+    for (const w of last) { const dd = len(sub(v, w)); if (dd < bd) { bd = dd; best = w; } }
+    if (best && bd < 1e-3) { v[0] = best[0]; v[1] = best[1]; v[2] = best[2]; }
+  }
+  const R = A.ring.length;
+  for (let i = 0; i < n; i++) {
+    const P = rings[i], Q = rings[i + 1];
+    for (let k = 0; k < R; k++) {
+      const k2 = (k + 1) % R;
+      tris.push([P[k], P[k2], Q[k2]], [P[k], Q[k2], Q[k]]);
+    }
+  }
 }
 
 // Drops the first `d` mm of a chain (normals follow the points that are kept).
@@ -649,7 +703,11 @@ function cornerPatch(c, r, rr, K, rings, tris) {
   const shared = [];
   for (const ring of rings) for (let k = 0; k < ring.length; k++) {
     const s = shared.find((v) => near(v, ring[k]));
-    if (s) ring[k] = s; else shared.push(ring[k]);
+    if (!s) { shared.push(ring[k]); continue; }
+    // The sweep's triangles hold the original point: give it the shared coordinates too.
+    const o = ring[k];
+    o[0] = s[0]; o[1] = s[1]; o[2] = s[2];
+    ring[k] = s;
   }
   // Sphere grid: i + j + k = K; the rim (one index 0) uses uniform angles, like the sweeps.
   const S = (i) => Math.sin((Math.PI * i) / (2 * K));

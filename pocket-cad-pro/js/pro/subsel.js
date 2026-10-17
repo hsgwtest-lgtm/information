@@ -20,28 +20,36 @@ export const active = () => !!S.id;
 const node = () => app.S.doc.nodes.find((n) => n.id === S.id);
 const keyOf = (n) => JSON.stringify([n.kind, n.params, n.scale, n.pos, n.rot, n.children?.length]);
 
+let pending = 0;
 export function start(n, mode = 'edge', hint = null) {
   if (!n) { toast('部品を 1 つ選択してください'); return; }
   if (n.hole) { toast('穴ではなくソリッドの部品を選んでください'); return; }
   if (n.lattice) { toast('格子には使えません。「格子の設定」から元の形を編集してください', 3000); return; }
   const tris = app.vp.meshes.get(n.id)?.mesh.geometry.getAttribute('position').count / 3 || 0;
-  if (tris > 400000) { toast('三角形が多すぎるため、辺・面を選べません', 3000); return; }
-  S.id = n.id; S.mode = mode; S.chains.clear(); S.faces.clear();
-  try {
-    S.an = partSurface(n);
-  } catch (e) {
-    console.error(e);
-    S.id = null;
-    toast('形を解析できませんでした');
-    return;
-  }
-  S.key = keyOf(n);
-  if (!S.group) { S.group = new Group(); S.group.renderOrder = 5; app.vp.scene.add(S.group); }
-  redraw();
-  app.updateToolBar();
-  if (hint) toast(hint, 3500);
-  else if (mode === 'edge') toast(S.an.chains.length ? '丸めたい辺をタップ（もう一度タップで解除）' : 'この部品には選べる辺がありません', 2500);
-  else toast('面をタップして選択（もう一度タップで解除）', 2500);
+  if (tris > 300000) { toast('三角形が多すぎるため、辺・面を選べません', 3000); return; }
+  const token = ++pending;
+  const run = () => {
+    // Skip when another start() came first or the part went away meanwhile.
+    if (token !== pending || !app.S.doc.nodes.includes(n)) return;
+    let an;
+    try {
+      an = partSurface(n);
+    } catch (e) {
+      console.error(e);
+      toast('形を解析できませんでした');
+      return;
+    }
+    stop();
+    S.id = n.id; S.mode = mode; S.an = an; S.key = keyOf(n);
+    if (!S.group) { S.group = new Group(); S.group.renderOrder = 5; app.vp.scene.add(S.group); }
+    redraw();
+    app.updateToolBar();
+    if (hint) toast(hint, 3500);
+    else if (mode === 'edge') toast(an.chains.length ? '丸めたい辺をタップ（もう一度タップで解除）' : 'この部品には選べる辺がありません', 2500);
+    else toast('面をタップして選択（もう一度タップで解除）', 2500);
+  };
+  // Big parts take a moment to analyse: say so before the main thread is busy.
+  if (tris > 30000) { toast('形を解析しています…', 8000); setTimeout(run, 40); } else run();
 }
 
 export function stop() {

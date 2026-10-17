@@ -65,11 +65,13 @@ function wrap(node, an) {
 
 const KEY = (p) => p.map((v) => Math.round(v * 1000)).join(',');
 
-// Corners where three selected convex, mutually perpendicular straight edges meet (and
-// nothing else): they get a sphere blend instead of the pointed meeting of three fillets.
-// Returns [{ V, u: [u1, u2, u3], ends: [[chain, 0 | 1], …] }] (u: along each edge, away
-// from the corner; end 0 = the chain starts at the corner).
-function sphereCorners(an, chains) {
+// Corners whose fillets are built together with their edges (see blendSolid):
+//  - sphere: three selected convex, mutually perpendicular edges meet (and nothing else);
+//  - joint: two selected convex edges turn around a concave one at an inside corner
+//    (the concave edge is rounded too when it is selected, which moves the axis).
+// Returns [{ V, u, ends: [[chain, 0 | 1], …] }] / [{ kind: 'joint', V, O, d, rc, ends }]
+// (u: along each edge, away from the corner; end 0 = the chain starts at the corner).
+function blendCorners(an, chains, r) {
   const ends = new Map(), all = new Map();
   const note = (map, c, i) => {
     const p = c.pts[i], k = KEY(p);
@@ -80,13 +82,31 @@ function sphereCorners(an, chains) {
   };
   for (const c of an.chains) if (!c.closed) { note(all, c, 0); note(all, c, c.pts.length - 1); }
   for (const c of chains) if (!c.closed) { note(ends, c, 0); note(ends, c, c.pts.length - 1); }
+  const perp = (a, b) => Math.abs(dot(a, b)) < 0.05;
   const out = [];
   for (const [k, l] of ends) {
-    if (l.length !== 3 || (all.get(k) || []).length !== 3 || !l.every((x) => x.c.convex)) continue;
-    if (new Set(l.map((x) => x.c)).size !== 3) continue;
-    const [a, b, c] = l.map((x) => x.u);
-    if (Math.abs(dot(a, b)) > 0.05 || Math.abs(dot(a, c)) > 0.05 || Math.abs(dot(b, c)) > 0.05) continue;
-    out.push({ V: l[0].V, u: [a, b, c], ends: l.map((x) => [x.c, x.end]) });
+    const at = all.get(k) || [];
+    if (at.length !== 3 || new Set(l.map((x) => x.c)).size !== l.length) continue;
+    const conv = l.filter((x) => x.c.convex);
+    if (conv.length === 3) {
+      const [a, b, c] = conv.map((x) => x.u);
+      if (perp(a, b) && perp(a, c) && perp(b, c)) out.push({ V: l[0].V, u: [a, b, c], ends: conv.map((x) => [x.c, x.end]) });
+      continue;
+    }
+    if (conv.length !== 2) continue;
+    const [A, B] = conv;
+    const third = at.find((x) => x.c !== A.c && x.c !== B.c);
+    if (!third || third.c.convex || !perp(A.u, B.u) || !perp(A.u, third.u) || !perp(B.u, third.u)) continue;
+    // Face normals at the corner end of each chain: one face is shared, the other is a side.
+    const nrm = (x) => { const i = x.end === 0 ? 0 : x.c.pts.length - 1; return [x.c.na[i], x.c.nb[i]]; };
+    let nA = null, nB = null;
+    for (const [p, po] of [nrm(A), [...nrm(A)].reverse()]) {
+      for (const [q, qo] of [nrm(B), [...nrm(B)].reverse()]) if (dot(p, q) > 0.99) { nA = po; nB = qo; }
+    }
+    // Inside corner: each side face looks along the other edge.
+    if (!nA || dot(nB, A.u) < 0.99 || dot(nA, B.u) < 0.99) continue;
+    const rc = l.some((x) => x.c === third.c) ? r : 0;
+    out.push({ kind: 'joint', V: A.V, O: add(A.V, mul(add(nA, nB), rc)), d: norm(cross(A.u, B.u)), rc, ends: [[A.c, A.end], [B.c, B.end]] });
   }
   return out;
 }
@@ -123,7 +143,7 @@ export function filletEdges(node, an, chains, { type = 'fillet', r = 1 } = {}) {
   const rel = (p) => sub(p, c).map(r3);
   const unit = (u) => u.map((v) => Math.round(v * 1e5) / 1e5);
   const name = type === 'chamfer' ? '面取り' : 'フィレット';
-  const corners = type === 'fillet' ? sphereCorners(an, chains) : [];
+  const corners = type === 'fillet' ? blendCorners(an, chains, r) : [];
   // Chains joined through corners form networks (union-find over the chains).
   const parent = new Map(chains.map((ch) => [ch, ch]));
   const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
@@ -161,7 +181,12 @@ export function filletEdges(node, an, chains, { type = 'fillet', r = 1 } = {}) {
         const [k0, k1] = endsAt.get(ch);
         return { pts: pk.pts.map(rel), na: pk.na, nb: pk.nb, c0: k0 >= 0 ? local.get(k0) : -1, c1: k1 >= 0 ? local.get(k1) : -1 };
       }),
-      corners: ids.map((k) => ({ V: rel(corners[k].V), u: corners[k].u.map(unit) })),
+      corners: ids.map((k) => {
+        const k0 = corners[k];
+        return k0.kind === 'joint'
+          ? { kind: 'joint', V: rel(k0.V), O: rel(k0.O), d: unit(k0.d), rc: k0.rc }
+          : { V: rel(k0.V), u: k0.u.map(unit) };
+      }),
     };
     g.children.push(f);
   }
@@ -175,6 +200,14 @@ export function setEdgeSize(g, type, r) {
     if (ch.kind === 'fillet' && ch.params.type === type && ch.params.sym !== false) {
       ch.params = { ...ch.params, r };
       if (type === 'chamfer') delete ch.params.r2;
+      // Joints around a rounded concave edge follow its new radius.
+      if (ch.params.corners) {
+        ch.params.corners = ch.params.corners.map((k) => {
+          if (k.kind !== 'joint' || !(k.rc > 0)) return k;
+          const f = r / k.rc;
+          return { ...k, rc: r, O: k.O.map((v, i) => r3(k.V[i] + (v - k.V[i]) * f)) };
+        });
+      }
     }
   }
   if (g.edgeOp?.type === type) g.edgeOp = { ...g.edgeOp, r };
