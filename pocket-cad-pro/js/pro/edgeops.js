@@ -1,0 +1,595 @@
+// Edges and faces of a part, as a CAD user means them, recovered from a triangle soup,
+// plus the solids that round (fillet) or bevel (chamfer) an edge.
+// Pure math on plain arrays (no three.js), so it also runs in Node for tests.
+//
+// Boolean (CSG) results are not clean meshes: an edge between two faces is often split
+// differently on each side (T-junctions), and flat faces are cut into many triangles.
+// analyzeSurface() therefore
+//   - welds vertices and groups coplanar triangles that touch into planar "regions",
+//   - finds crease edges (dihedral angle above `angle`), pairing a T-junction edge with
+//     the face on its other side by geometry instead of by shared vertices,
+//   - merges the overlapping pieces of one straight edge, and
+//   - joins segments that continue smoothly (a circle's 64 sides) into one "chain",
+// so one tap selects "the top edge of the box" or "the rim of the hole".
+
+const WELD = 2e-4; // mm: corners closer than this are the same vertex
+const TOL = 1e-3; // mm: point-on-plane / collinearity tolerance
+
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const len = (a) => Math.hypot(a[0], a[1], a[2]);
+const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const r3 = (v) => Math.round(v * 1000) / 1000;
+
+// ---------------------------------------------------------------- analysis
+
+export function analyzeSurface(pos, { angle = 30 } = {}) {
+  const nt = Math.floor(pos.length / 9);
+  const V = [];
+  const tri = new Int32Array(nt * 3);
+  // Weld with a tolerance: boolean results carry float noise, and two copies of one
+  // corner may fall on either side of a grid line. Neighbouring cells are checked only
+  // when the point lies within WELD of a cell border.
+  const cells = new Map();
+  const CELL = WELD * 8, EDGE = 1 / 8;
+  const weld = (x, y, z) => {
+    const fx = x / CELL, fy = y / CELL, fz = z / CELL;
+    const ix = Math.floor(fx), iy = Math.floor(fy), iz = Math.floor(fz);
+    const rx = [0], ry = [0], rz = [0];
+    if (fx - ix < EDGE) rx.push(-1); else if (ix + 1 - fx < EDGE) rx.push(1);
+    if (fy - iy < EDGE) ry.push(-1); else if (iy + 1 - fy < EDGE) ry.push(1);
+    if (fz - iz < EDGE) rz.push(-1); else if (iz + 1 - fz < EDGE) rz.push(1);
+    for (const dx of rx) for (const dy of ry) for (const dz of rz) {
+      const l = cells.get(`${ix + dx},${iy + dy},${iz + dz}`);
+      if (!l) continue;
+      for (const i of l) {
+        if (Math.abs(V[i * 3] - x) <= WELD && Math.abs(V[i * 3 + 1] - y) <= WELD && Math.abs(V[i * 3 + 2] - z) <= WELD) return i;
+      }
+    }
+    const i = V.length / 3;
+    V.push(x, y, z);
+    const key = `${ix},${iy},${iz}`;
+    const l = cells.get(key);
+    if (l) l.push(i); else cells.set(key, [i]);
+    return i;
+  };
+  for (let t = 0; t < nt; t++) {
+    for (let k = 0; k < 3; k++) {
+      const o = t * 9 + k * 3;
+      tri[t * 3 + k] = weld(pos[o], pos[o + 1], pos[o + 2]);
+    }
+  }
+  const nv = V.length / 3;
+  const P = (i) => [V[i * 3], V[i * 3 + 1], V[i * 3 + 2]];
+  const N = new Float64Array(nt * 3), D = new Float64Array(nt), area = new Float64Array(nt);
+  const ok = new Uint8Array(nt);
+  let bmin = [Infinity, Infinity, Infinity], bmax = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < nv; i++) for (let k = 0; k < 3; k++) { bmin[k] = Math.min(bmin[k], V[i * 3 + k]); bmax[k] = Math.max(bmax[k], V[i * 3 + k]); }
+  for (let t = 0; t < nt; t++) {
+    const a = P(tri[t * 3]), b = P(tri[t * 3 + 1]), c = P(tri[t * 3 + 2]);
+    const n = cross(sub(b, a), sub(c, a));
+    const l = len(n);
+    if (l < 1e-12 || tri[t * 3] === tri[t * 3 + 1] || tri[t * 3 + 1] === tri[t * 3 + 2] || tri[t * 3] === tri[t * 3 + 2]) continue;
+    N[t * 3] = n[0] / l; N[t * 3 + 1] = n[1] / l; N[t * 3 + 2] = n[2] / l;
+    D[t] = (n[0] * a[0] + n[1] * a[1] + n[2] * a[2]) / l;
+    area[t] = l / 2;
+    ok[t] = 1;
+  }
+  const nrm = (t) => [N[t * 3], N[t * 3 + 1], N[t * 3 + 2]];
+  const onPlane = (t, p) => Math.abs(N[t * 3] * p[0] + N[t * 3 + 1] * p[1] + N[t * 3 + 2] * p[2] - D[t]) < TOL;
+  // Coplanar: same orientation and every corner of g on f's plane (robust for slivers).
+  const coplanar = (f, g) => dot(nrm(f), nrm(g)) > 0.995 && [0, 1, 2].every((k) => onPlane(f, P(tri[g * 3 + k])))
+    && [0, 1, 2].every((k) => onPlane(g, P(tri[f * 3 + k])));
+
+  // ---- planar regions: coplanar triangles sharing a vertex (covers T-junctions too)
+  const parent = new Int32Array(nt).map((_, i) => i);
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const unite = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[Math.max(a, b)] = Math.min(a, b); };
+  const vtris = Array.from({ length: nv }, () => []);
+  for (let t = 0; t < nt; t++) if (ok[t]) for (let k = 0; k < 3; k++) vtris[tri[t * 3 + k]].push(t);
+  for (const list of vtris) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (find(list[i]) !== find(list[j]) && coplanar(list[i], list[j])) unite(list[i], list[j]);
+      }
+    }
+  }
+  const regionOf = new Int32Array(nt).fill(-1);
+  const regions = [];
+  const rmap = new Map();
+  for (let t = 0; t < nt; t++) {
+    if (!ok[t]) continue;
+    const root = find(t);
+    let r = rmap.get(root);
+    if (r === undefined) { r = regions.length; rmap.set(root, r); regions.push({ id: r, tris: [], n: [0, 0, 0], area: 0 }); }
+    regionOf[t] = r;
+    const reg = regions[r];
+    reg.tris.push(t);
+    reg.area += area[t];
+    reg.n = add(reg.n, mul(nrm(t), area[t]));
+  }
+  for (const reg of regions) { reg.n = norm(reg.n); reg.d = D[reg.tris[0]]; }
+
+  // ---- edges
+  const edges = new Map();
+  for (let t = 0; t < nt; t++) {
+    if (!ok[t]) continue;
+    for (let k = 0; k < 3; k++) {
+      const a = tri[t * 3 + k], b = tri[t * 3 + (k + 1) % 3];
+      const key = a < b ? a * nv + b : b * nv + a;
+      let e = edges.get(key);
+      if (!e) edges.set(key, e = { a: Math.min(a, b), b: Math.max(a, b), f: [] });
+      e.f.push(t);
+    }
+  }
+  // Spatial grid of triangles, for pairing T-junction edges with the face across them.
+  const span = Math.max(bmax[0] - bmin[0], bmax[1] - bmin[1], bmax[2] - bmin[2], 1e-3);
+  const cell = span / 48;
+  const ci = (x, k) => Math.floor((x - bmin[k]) / cell);
+  let grid = null;
+  const buildGrid = () => {
+    grid = new Map();
+    for (let t = 0; t < nt; t++) {
+      if (!ok[t]) continue;
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (let k = 0; k < 3; k++) { const p = P(tri[t * 3 + k]); for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], p[a]); hi[a] = Math.max(hi[a], p[a]); } }
+      const i0 = ci(lo[0] - TOL, 0), i1 = ci(hi[0] + TOL, 0), j0 = ci(lo[1] - TOL, 1), j1 = ci(hi[1] + TOL, 1), k0 = ci(lo[2] - TOL, 2), k1 = ci(hi[2] + TOL, 2);
+      if ((i1 - i0 + 1) * (j1 - j0 + 1) * (k1 - k0 + 1) > 20000) continue;
+      for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) for (let k = k0; k <= k1; k++) {
+        const key = `${i},${j},${k}`;
+        let list = grid.get(key);
+        if (!list) grid.set(key, list = []);
+        list.push(t);
+      }
+    }
+  };
+  // Is point m inside triangle g (m assumed near g's plane)?
+  const inTri = (g, m) => {
+    const a = P(tri[g * 3]), b = P(tri[g * 3 + 1]), c = P(tri[g * 3 + 2]);
+    const v0 = sub(c, a), v1 = sub(b, a), v2 = sub(m, a);
+    const d00 = dot(v0, v0), d01 = dot(v0, v1), d02 = dot(v0, v2), d11 = dot(v1, v1), d12 = dot(v1, v2);
+    const den = d00 * d11 - d01 * d01;
+    if (Math.abs(den) < 1e-18) return false;
+    const u = (d11 * d02 - d01 * d12) / den, v = (d00 * d12 - d01 * d02) / den;
+    const tol = 1e-4;
+    return u >= -tol && v >= -tol && u + v <= 1 + tol;
+  };
+  // Welded vertices near segment A-B (grid of all vertices, built on first use).
+  let vgrid = null;
+  const verticesNear = (A, B) => {
+    if (!vgrid) {
+      vgrid = new Map();
+      for (let i = 0; i < nv; i++) {
+        const key = `${ci(V[i * 3], 0)},${ci(V[i * 3 + 1], 1)},${ci(V[i * 3 + 2], 2)}`;
+        const l = vgrid.get(key);
+        if (l) l.push(i); else vgrid.set(key, [i]);
+      }
+    }
+    const lo = [0, 1, 2].map((k) => ci(Math.min(A[k], B[k]) - TOL, k)), hi = [0, 1, 2].map((k) => ci(Math.max(A[k], B[k]) + TOL, k));
+    const out = [];
+    if ((hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1) > 50000) return out;
+    for (let i = lo[0]; i <= hi[0]; i++) for (let j = lo[1]; j <= hi[1]; j++) for (let k = lo[2]; k <= hi[2]; k++) {
+      const l = vgrid.get(`${i},${j},${k}`);
+      if (l) for (const v of l) out.push(v);
+    }
+    return out;
+  };
+  // Third corner of triangle t (the one not on edge a-b).
+  const apex = (t, a, b) => { for (let k = 0; k < 3; k++) { const v = tri[t * 3 + k]; if (v !== a && v !== b) return P(v); } return P(tri[t * 3]); };
+  const cosLim = Math.cos((angle * Math.PI) / 180);
+  const creases = [];
+  const addCrease = (ia, ib, f, g, af, ag) => {
+    const nf = nrm(f), ng = nrm(g), A = P(ia);
+    // Convex when each face lies behind the other's plane.
+    let s = dot(sub(af, A), ng);
+    if (Math.abs(s) < 1e-7) s = dot(sub(ag, A), nf);
+    creases.push({ ia, ib, nf, ng, rf: regionOf[f], rg: regionOf[g], convex: s < 0 });
+  };
+  for (const e of edges.values()) {
+    if (e.f.length === 2) {
+      const [f, g] = e.f;
+      if (dot(nrm(f), nrm(g)) >= cosLim || coplanar(f, g)) continue;
+      addCrease(e.a, e.b, f, g, apex(f, e.a, e.b), apex(g, e.a, e.b));
+    } else if (e.f.length === 1) {
+      // A T-junction edge: part of it may be a crease and part a seam inside a flat face,
+      // so split it at every vertex lying on it and judge each piece on its own.
+      const f = e.f[0];
+      if (!grid) buildGrid();
+      const A0 = P(e.a), B0 = P(e.b), dd = sub(B0, A0), l2 = dot(dd, dd);
+      const on = [];
+      for (const v of verticesNear(A0, B0)) {
+        if (v === e.a || v === e.b) continue;
+        const w = sub(P(v), A0);
+        const t = dot(w, dd) / l2;
+        if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+        const r = sub(w, mul(dd, t));
+        if (dot(r, r) < TOL * TOL) on.push([t, v]);
+      }
+      on.sort((x, y) => x[0] - y[0]);
+      const cuts = [e.a, ...on.map((x) => x[1]), e.b];
+      for (let s = 0; s < cuts.length - 1; s++) {
+        const ia = cuts[s], ib = cuts[s + 1];
+        const A = P(ia), B = P(ib), M = mul(add(A, B), 0.5);
+        let partner = -1, seam = false;
+        for (const g of grid.get(`${ci(M[0], 0)},${ci(M[1], 1)},${ci(M[2], 2)}`) || []) {
+          if (g === f || !onPlane(g, M) || (!onPlane(g, A) && !onPlane(g, B)) || !inTri(g, M)) continue;
+          if (coplanar(f, g)) { seam = true; break; }
+          if (partner < 0) partner = g;
+        }
+        if (seam || partner < 0 || dot(nrm(f), nrm(partner)) >= cosLim) continue;
+        // The partner's apex: its corner farthest from the edge line.
+        const d = norm(sub(B, A));
+        let best = null, bd = -1;
+        for (let k = 0; k < 3; k++) {
+          const p = P(tri[partner * 3 + k]);
+          const w = sub(p, A);
+          const dist = len(sub(w, mul(d, dot(w, d))));
+          if (dist > bd) { bd = dist; best = p; }
+        }
+        addCrease(ia, ib, f, partner, apex(f, e.a, e.b), best);
+      }
+    }
+  }
+  const segs = splitAndDedupe(creases, P, nv, bmin, cell);
+  const chains = buildChains(segs);
+  return { tri, V, N, nt, regionOf, regions, chains, bbox: { min: bmin, max: bmax }, area };
+}
+
+// One straight edge is often split differently on its two sides (a long edge on one face,
+// several short ones on the other). Splitting every crease at the crease vertices lying on
+// it makes both sides identical, so duplicates can be dropped by their vertex pair.
+function splitAndDedupe(creases, P, nv, bmin, cell) {
+  const ids = new Set();
+  for (const c of creases) { ids.add(c.ia); ids.add(c.ib); }
+  const ci = (x, k) => Math.floor((x - bmin[k]) / cell);
+  const grid = new Map();
+  for (const i of ids) {
+    const p = P(i);
+    const key = `${ci(p[0], 0)},${ci(p[1], 1)},${ci(p[2], 2)}`;
+    const l = grid.get(key) || [];
+    l.push(i);
+    grid.set(key, l);
+  }
+  const seen = new Map();
+  const out = [];
+  const push = (ia, ib, c) => {
+    if (ia === ib) return;
+    const key = ia < ib ? ia * nv + ib : ib * nv + ia;
+    if (seen.has(key)) return;
+    seen.set(key, true);
+    const A = P(ia), B = P(ib);
+    out.push({ ...c, ia, ib, A, B, d: norm(sub(B, A)) });
+  };
+  for (const c of creases) {
+    const A = P(c.ia), B = P(c.ib);
+    const d = sub(B, A), l2 = dot(d, d);
+    const on = [];
+    const lo = [0, 1, 2].map((k) => ci(Math.min(A[k], B[k]) - TOL, k)), hi = [0, 1, 2].map((k) => ci(Math.max(A[k], B[k]) + TOL, k));
+    if ((hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1) < 50000) {
+      for (let i = lo[0]; i <= hi[0]; i++) for (let j = lo[1]; j <= hi[1]; j++) for (let k = lo[2]; k <= hi[2]; k++) {
+        for (const v of grid.get(`${i},${j},${k}`) || []) {
+          if (v === c.ia || v === c.ib) continue;
+          const w = sub(P(v), A);
+          const t = dot(w, d) / l2;
+          if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+          const e = sub(w, mul(d, t));
+          if (dot(e, e) < TOL * TOL) on.push([t, v]);
+        }
+      }
+    }
+    on.sort((a, b) => a[0] - b[0]);
+    let prev = c.ia;
+    for (const [, v] of on) { push(prev, v, c); prev = v; }
+    push(prev, c.ib, c);
+  }
+  return out;
+}
+
+// Joins segments that continue smoothly (turn < 30°, similar faces on both sides) into chains.
+function buildChains(all) {
+  // Segments of a few µm (float noise in boolean results) have no usable direction:
+  // collapse them, joining their two vertices.
+  const rep = new Map();
+  const root = (v) => { while (rep.has(v)) v = rep.get(v); return v; };
+  for (const s of all) {
+    if (len(sub(s.B, s.A)) < 0.01) { const a = root(s.ia), b = root(s.ib); if (a !== b) rep.set(b, a); }
+  }
+  const segs = [];
+  for (const s of all) {
+    const ia = root(s.ia), ib = root(s.ib);
+    if (ia === ib) continue;
+    segs.push(ia === s.ia && ib === s.ib ? s : { ...s, ia, ib });
+  }
+  const at = new Map();
+  segs.forEach((s, i) => {
+    for (const [end, v] of [[0, s.ia], [1, s.ib]]) {
+      let l = at.get(v);
+      if (!l) at.set(v, l = []);
+      l.push([i, end]);
+    }
+  });
+  // Normals of segment s matched to a reference pair (ra, rb): returns [na, nb] or null.
+  const match = (s, ra, rb, lim) => {
+    if (dot(s.nf, ra) > lim && dot(s.ng, rb) > lim) return [s.nf, s.ng];
+    if (dot(s.ng, ra) > lim && dot(s.nf, rb) > lim) return [s.ng, s.nf];
+    return null;
+  };
+  const cosTurn = Math.cos((30 * Math.PI) / 180), cosN = Math.cos((40 * Math.PI) / 180);
+  // link[i][end] = [j, endOfJ] when segment i continues into j at that end.
+  const link = segs.map(() => [null, null]);
+  for (const list of at.values()) {
+    if (list.length !== 2) continue;
+    const [[i, ei], [j, ej]] = list;
+    if (i === j) continue;
+    const si = segs[i], sj = segs[j];
+    if (si.convex !== sj.convex) continue;
+    // Directions pointing away from the shared vertex.
+    const ui = ei === 0 ? si.d : mul(si.d, -1), uj = ej === 0 ? sj.d : mul(sj.d, -1);
+    if (dot(ui, uj) > -cosTurn) continue;
+    if (!match(sj, si.nf, si.ng, cosN)) continue;
+    link[i][ei] = [j, ej];
+    link[j][ej] = [i, ei];
+  }
+  const seen = new Uint8Array(segs.length);
+  const chains = [];
+  const walk = (start, startEnd) => {
+    // Walk from segment `start` leaving through its end `1 - startEnd`.
+    const order = [];
+    let i = start, inEnd = startEnd;
+    while (i !== null && !seen[i]) {
+      seen[i] = 1;
+      order.push([i, inEnd]);
+      const nxt = link[i][1 - inEnd];
+      if (!nxt) break;
+      [i, inEnd] = nxt;
+    }
+    return order;
+  };
+  // The segment's two normals, ordered to follow the previous segment's (ra, rb).
+  const orient = (s, ra, rb) => (dot(s.nf, ra) + dot(s.ng, rb) >= dot(s.ng, ra) + dot(s.nf, rb) ? [s.nf, s.ng] : [s.ng, s.nf]);
+  const emit = (order, closed) => {
+    const pts = [], na = [], nb = [];
+    let ra = segs[order[0][0]].nf, rb = segs[order[0][0]].ng;
+    order.forEach(([i, inEnd], k) => {
+      const s = segs[i];
+      const [a, b] = orient(s, ra, rb);
+      ra = a; rb = b;
+      const p0 = inEnd === 0 ? s.A : s.B, p1 = inEnd === 0 ? s.B : s.A;
+      if (k === 0) { pts.push(p0); na.push(a); nb.push(b); }
+      else { na[na.length - 1] = norm(add(na[na.length - 1], a)); nb[nb.length - 1] = norm(add(nb[nb.length - 1], b)); }
+      pts.push(p1); na.push(a); nb.push(b);
+    });
+    if (closed) {
+      // The last point repeats the first; average their normals into the first.
+      pts.pop();
+      na[0] = norm(add(na[0], na.pop())); nb[0] = norm(add(nb[0], nb.pop()));
+    }
+    let length = 0;
+    for (let k = 0; k < pts.length - (closed ? 0 : 1); k++) length += len(sub(pts[(k + 1) % pts.length], pts[k]));
+    const s0 = segs[order[0][0]];
+    chains.push({ id: chains.length, pts, na, nb, closed, convex: s0.convex, length, regions: [...new Set(order.flatMap(([i]) => [segs[i].rf, segs[i].rg]))] });
+  };
+  // Open chains start at a segment end with no continuation.
+  segs.forEach((s, i) => {
+    if (seen[i]) return;
+    for (const end of [0, 1]) {
+      if (!link[i][end] && !seen[i]) emit(walk(i, end), false);
+    }
+  });
+  segs.forEach((s, i) => { if (!seen[i]) emit(walk(i, 0), true); });
+  return chains;
+}
+
+// ---------------------------------------------------------------- face outlines
+
+// Outline of planar regions as 2D shapes in the region's plane frame, for push / pull.
+// Returns { origin, U, V, N, shapes: [{ o: [[u, v]], h: [[[u, v]]] }] }.
+export function regionOutline(an, rid) {
+  const reg = an.regions[rid];
+  const { tri, V } = an;
+  const P = (i) => [V[i * 3], V[i * 3 + 1], V[i * 3 + 2]];
+  const nv = V.length / 3;
+  const Nn = reg.n;
+  const U = norm(Math.abs(Nn[0]) < 0.9 ? cross(Nn, [1, 0, 0]) : cross(Nn, [0, 1, 0]));
+  const W = cross(Nn, U);
+  const origin = P(tri[reg.tris[0] * 3]);
+  const uv = (i) => { const d = sub(P(i), origin); return [dot(d, U), dot(d, W)]; };
+  // Directed edges; opposite pairs cancel, T-junction edges are split at the vertices on them.
+  let directed = [];
+  const verts = new Set();
+  for (const t of reg.tris) for (let k = 0; k < 3; k++) { directed.push([tri[t * 3 + k], tri[t * 3 + (k + 1) % 3]]); verts.add(tri[t * 3 + k]); }
+  // Keeps each directed edge as many times as it outnumbers its reverse.
+  const cancel = (list) => {
+    const m = new Map();
+    for (const [a, b] of list) m.set(a * nv + b, (m.get(a * nv + b) || 0) + 1);
+    const outList = [];
+    for (const [k, c] of m) {
+      const a = Math.floor(k / nv), b = k - a * nv;
+      const net = c - (m.get(b * nv + a) || 0);
+      for (let i = 0; i < net; i++) outList.push([a, b]);
+    }
+    return outList;
+  };
+  directed = cancel(directed);
+  const vlist = [...verts].map((i) => [i, uv(i)]);
+  const split = [];
+  for (const [a, b] of directed) {
+    const pa = uv(a), pb = uv(b);
+    const dx = pb[0] - pa[0], dy = pb[1] - pa[1], l2 = dx * dx + dy * dy;
+    const on = [];
+    for (const [i, p] of vlist) {
+      if (i === a || i === b) continue;
+      const t = ((p[0] - pa[0]) * dx + (p[1] - pa[1]) * dy) / l2;
+      if (t <= 1e-6 || t >= 1 - 1e-6) continue;
+      const ex = pa[0] + t * dx - p[0], ey = pa[1] + t * dy - p[1];
+      if (ex * ex + ey * ey < TOL * TOL) on.push([t, i]);
+    }
+    on.sort((x, y) => x[0] - y[0]);
+    let prev = a;
+    for (const [, i] of on) { split.push([prev, i]); prev = i; }
+    split.push([prev, b]);
+  }
+  const bound = cancel(split);
+  // Chain the boundary into loops.
+  const out = new Map();
+  for (const e of bound) { const l = out.get(e[0]) || []; l.push(e); out.set(e[0], l); }
+  const used = new Set();
+  const loops = [];
+  for (const e of bound) {
+    if (used.has(e)) continue;
+    const loop = [];
+    let cur = e;
+    while (cur && !used.has(cur)) {
+      used.add(cur);
+      loop.push(uv(cur[0]));
+      const nexts = (out.get(cur[1]) || []).filter((x) => !used.has(x));
+      cur = nexts[0];
+    }
+    if (loop.length >= 3) loops.push(dropCollinear(loop));
+  }
+  const areaOf = (l) => { let s = 0; for (let i = 0; i < l.length; i++) { const [x1, y1] = l[i], [x2, y2] = l[(i + 1) % l.length]; s += x1 * y2 - x2 * y1; } return s / 2; };
+  const inside = ([x, y], poly) => {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, yi] = poly[i], [xj, yj] = poly[j];
+      if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  };
+  const withA = loops.map((l) => ({ l, a: areaOf(l) })).filter((x) => Math.abs(x.a) > 1e-6);
+  const outers = withA.filter((x) => x.a > 0).map((x) => ({ o: x.l, a: x.a, h: [] }));
+  for (const h of withA.filter((x) => x.a < 0)) {
+    let best = null;
+    for (const o of outers) if ((!best || o.a < best.a) && inside(h.l[0], o.o)) best = o;
+    if (best) best.h.push(h.l);
+  }
+  return { origin, U, V: W, N: Nn, shapes: outers.map(({ o, h }) => ({ o, h })), area: reg.area };
+}
+
+function dropCollinear(loop) {
+  const out = [];
+  for (let i = 0; i < loop.length; i++) {
+    const a = loop[(i + loop.length - 1) % loop.length], p = loop[i], b = loop[(i + 1) % loop.length];
+    const cr = (p[0] - a[0]) * (b[1] - p[1]) - (p[1] - a[1]) * (b[0] - p[0]);
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    if (Math.abs(cr) / l > 1e-5) out.push(p);
+  }
+  return out.length >= 3 ? out : loop;
+}
+
+// ---------------------------------------------------------------- fillet / chamfer solids
+
+// Arc resolution for a fillet of radius r.
+export const arcSegments = (r) => (r < 1 ? 6 : r < 4 ? 10 : 16);
+
+// Cross-section of the cutter (convex edge) or filler (concave edge) at chain point P.
+// t: edge tangent; na, nb: outward normals of the faces; returns 3D points (a ring).
+function section(P, t, na, nb, p, K) {
+  na = norm(sub(na, mul(t, dot(na, t))));
+  nb = norm(sub(nb, mul(t, dot(nb, t))));
+  const sgn = p.concave ? 1 : -1;
+  let ua = norm(cross(t, na)); if (dot(ua, nb) * sgn < 0) ua = mul(ua, -1);
+  let ub = norm(cross(t, nb)); if (dot(ub, na) * sgn < 0) ub = mul(ub, -1);
+  const cosT = Math.max(-0.996, Math.min(0.996, dot(ua, ub)));
+  const th = Math.acos(cosT);
+  // Offsets keep the solid's faces off the part's faces (coplanar faces upset booleans).
+  const eps = p.eps ?? 0.05;
+  const away = norm(add(na, nb));
+  const off = (q, n) => add(q, mul(n, sgn * -eps)); // convex: outward (+n); concave: into material (-n)
+  const ring = [off(P, away)];
+  if (p.type === 'chamfer') {
+    const Ta = add(P, mul(ua, p.r)), Tb = add(P, mul(ub, p.r2 ?? p.r));
+    ring.push(off(Ta, na), Ta, Tb, off(Tb, nb));
+    return ring;
+  }
+  const r = p.r;
+  const s = r / Math.tan(th / 2);
+  const Ta = add(P, mul(ua, s)), Tb = add(P, mul(ub, s));
+  const bis = norm(add(ua, ub));
+  const O = add(P, mul(bis, r / Math.sin(th / 2)));
+  const e1 = norm(sub(Ta, O));
+  const tb = sub(Tb, O);
+  const e2 = norm(sub(tb, mul(e1, dot(tb, e1))));
+  const phi = Math.atan2(dot(tb, e2), dot(tb, e1));
+  ring.push(off(Ta, na), Ta);
+  for (let k = 1; k < K; k++) {
+    const a = (phi * k) / K;
+    ring.push(add(O, add(mul(e1, r * Math.cos(a)), mul(e2, r * Math.sin(a)))));
+  }
+  ring.push(Tb, off(Tb, nb));
+  return ring;
+}
+
+// Sweep of the cross-section along a chain. p: { type: 'fillet' | 'chamfer', r, r2?,
+// concave, closed, pts, na, nb, ext?, eps? }. Returns a Float32Array triangle soup
+// (closed, outward-facing) in the same frame as p.pts.
+export function filletSolid(p) {
+  let pts = p.pts.map((q) => [...q]);
+  const m = pts.length;
+  if (m < 2) return new Float32Array(0);
+  const tan = pts.map((_, i) => {
+    if (p.closed) return norm(sub(pts[(i + 1) % m], pts[(i - 1 + m) % m]));
+    if (i === 0) return norm(sub(pts[1], pts[0]));
+    if (i === m - 1) return norm(sub(pts[m - 1], pts[m - 2]));
+    return norm(add(norm(sub(pts[i + 1], pts[i])), norm(sub(pts[i], pts[i - 1]))));
+  });
+  if (!p.closed) {
+    const ext = p.ext ?? 0.05;
+    pts[0] = sub(pts[0], mul(tan[0], ext));
+    pts[m - 1] = add(pts[m - 1], mul(tan[m - 1], ext));
+  }
+  const K = arcSegments(p.r);
+  const rings = pts.map((P, i) => section(P, tan[i], p.na[i], p.nb[i], p, K));
+  const R = rings[0].length;
+  const out = [];
+  const tri = (a, b, c) => out.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+  const spans = p.closed ? m : m - 1;
+  for (let i = 0; i < spans; i++) {
+    const A = rings[i], B = rings[(i + 1) % m];
+    for (let k = 0; k < R; k++) {
+      const k2 = (k + 1) % R;
+      tri(A[k], A[k2], B[k2]);
+      tri(A[k], B[k2], B[k]);
+    }
+  }
+  if (!p.closed) {
+    const A = rings[0], B = rings[m - 1];
+    for (let k = 1; k < R - 1; k++) { tri(A[0], A[k + 1], A[k]); tri(B[0], B[k], B[k + 1]); }
+  }
+  const f = new Float32Array(out);
+  if (signedVolume(f) < 0) {
+    for (let i = 0; i < f.length; i += 9) for (let k = 0; k < 3; k++) { const t = f[i + 3 + k]; f[i + 3 + k] = f[i + 6 + k]; f[i + 6 + k] = t; }
+  }
+  return f;
+}
+
+export function signedVolume(a) {
+  let v = 0;
+  for (let i = 0; i < a.length; i += 9) {
+    v += a[i] * (a[i + 4] * a[i + 8] - a[i + 5] * a[i + 7]) - a[i + 1] * (a[i + 3] * a[i + 8] - a[i + 5] * a[i + 6]) + a[i + 2] * (a[i + 3] * a[i + 7] - a[i + 4] * a[i + 6]);
+  }
+  return v / 6;
+}
+
+// Wedge angle (radians) of a chain at its middle: the material angle of a convex edge,
+// the air angle of a concave one (π minus the angle between the face normals).
+export function wedgeAngle(c) {
+  const m = c.pts.length, i = Math.max(0, Math.min(m - 2, Math.floor((m - 1) / 2)));
+  const t = norm(sub(c.pts[i + 1], c.pts[i]));
+  const na = norm(sub(c.na[i], mul(t, dot(c.na[i], t)))), nb = norm(sub(c.nb[i], mul(t, dot(c.nb[i], t))));
+  return Math.PI - Math.acos(Math.max(-1, Math.min(1, dot(na, nb))));
+}
+
+// Distance from a fillet's edge to where it meets each face.
+export const tangentLength = (type, r, theta) => (type === 'chamfer' ? r : r / Math.tan(theta / 2));
+
+// Rounds chain data for storage in the document.
+export const packChain = (c) => ({
+  pts: c.pts.map((q) => q.map(r3)),
+  na: c.na.map((q) => q.map((v) => Math.round(v * 1e5) / 1e5)),
+  nb: c.nb.map((q) => q.map((v) => Math.round(v * 1e5) / 1e5)),
+  closed: c.closed, concave: !c.convex,
+});

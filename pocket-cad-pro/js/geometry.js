@@ -11,6 +11,7 @@ import { flattenSketch } from './bezier.js';
 import { ISO, SIZES, threadGeometry } from './pro/threads.js';
 import { gearOutline } from './pro/gear.js';
 import { loftGeometry, chamferBoxLayers } from './pro/loft.js';
+import { filletSolid } from './pro/edgeops.js';
 
 let font = null;
 export function setFont(f) { font = f; }
@@ -47,6 +48,8 @@ export const KINDS = {
   // Internal kinds created by generators (templates, pattern tool).
   loft:     { label: 'ロフト', icon: 'cbox', pro: true, params: [] },
   pattern:  { label: 'パターン', icon: 'pattern', pro: true, params: [] },
+  // Fillet / chamfer along a selected edge: a cutter (convex edge) or filler (concave).
+  fillet:   { label: 'フィレット', icon: 'fillet', pro: true, params: [] },
   mesh:     { label: 'STL', icon: 'mesh', params: [] },
   group:    { label: 'グループ', icon: 'group', params: [] },
 };
@@ -199,6 +202,14 @@ function primitive(kind, p) {
     case 'cbox': return centered(loftGeometry(chamferBoxLayers(p)) || new BoxGeometry(1, 1, 1));
     case 'loft': return centered(loftGeometry(p.layers || []) || new BoxGeometry(1, 1, 1));
     case 'pattern': return patternGeometry(p);
+    case 'fillet': {
+      // Built in the parent group's frame (the node sits at its origin), so not centered.
+      const f = filletSolid(p);
+      if (!f.length) return new BoxGeometry(0.01, 0.01, 0.01);
+      const g = new BufferGeometry();
+      g.setAttribute('position', new Float32BufferAttribute(f, 3));
+      return g;
+    }
     default:
       return new BoxGeometry(10, 10, 10);
   }

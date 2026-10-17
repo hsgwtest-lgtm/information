@@ -78,7 +78,7 @@ function quickMetrics(pos, M, sinA, stride) {
     const area2 = n.length();
     if (area2 < 1e-12) continue;
     const nz = n.z / area2, area = area2 / 2;
-    if (nz > -sinA) continue;
+    if (nz > -sinA - 1e-3) continue;
     if (Math.max(a.z, b.z, c.z) < zmin + 0.15) { if (nz < -0.985) contact += area; continue; }
     overhang += area;
     support += area * -nz * ((a.z + b.z + c.z) / 3 - zmin);
@@ -99,7 +99,7 @@ function refineSupport(bvh, pos, M, sinA, zmin, limit = 1600) {
     const area2 = n.length();
     if (area2 < 1e-12) continue;
     const nz = n.z / area2;
-    if (nz > -sinA || Math.max(a.z, b.z, c.z) < zmin + 0.15) continue;
+    if (nz > -sinA - 1e-3 || Math.max(a.z, b.z, c.z) < zmin + 0.15) continue;
     tris.push([i, (area2 / 2) * -nz, (a.z + b.z + c.z) / 3 - zmin]);
   }
   if (!tris.length) return 0;
@@ -212,7 +212,7 @@ export function footprintYaw(pos, M) {
 
 // Tiny z-buffered software render of the oriented part (any triangle count), with the
 // faces that need support in red and the plate as a line.
-function renderPreview(pos, M, sinA, color, W = 150, H = 112) {
+export function renderPreview(pos, M, sinA, color, W = 150, H = 112) {
   const w = W * 2, h = H * 2;
   const vd = new Vector3(0.6, -0.9, 0.7).normalize();
   const right = new Vector3().crossVectors(new Vector3(0, 0, 1), vd).normalize();

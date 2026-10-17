@@ -173,4 +173,63 @@ export const TEMPLATES = [
       ], '#b07cff')];
     },
   },
+  {
+    id: 'hinge', label: '蝶番（そのまま動く）', icon: 'hinge', desc: '組み立て不要。2 枚の羽根が最初から回る状態で一度に印刷できる',
+    params: [['L', '長さ', 40, 12, 5], ['W', '羽根の幅', 18, 6, 1], ['T', '板の厚み', 2.4, 1.2, 0.2], ['D', '軸の太さ', 7, 4, 0.5],
+      ['n', 'こまの数（奇数）', 5, 3, 2, { int: true }], ['c', 'すき間', 0.35, 0.15, 0.05], ['holes', '取付穴 (0/1)', 1, 0, 1, { int: true }]],
+    build(p) {
+      return hingeParts(p);
+    },
+  },
 ];
+
+// Print-in-place hinge, axis along X at height D/2, lying flat. Knuckles alternate
+// between leaf A (even, both ends) and leaf B; each A knuckle carries 45° cone pins that sit
+// in matching recesses of the neighbouring B knuckles, offset by the clearance c, so the
+// parts never touch and every surface prints without support.
+export function hingeParts(p) {
+  const n = Math.max(3, Math.round(p.n) % 2 ? Math.round(p.n) : Math.round(p.n) + 1);
+  const { L, W, c } = p;
+  const D = Math.max(3, p.D), T = Math.min(p.T, D - 0.4);
+  const s = (L - (n - 1) * c) / n;
+  const zc = D / 2, ROT = [0, 90, 0];
+  const x0 = (k) => -L / 2 + k * (s + c);
+  const knuckle = (k) => N('cylinder', { dia: D, h: r3(s), seg: 64 }, [r3(x0(k) + s / 2), 0, r3(zc)], { rot: ROT, name: 'こま' });
+  const clearance = (k) => N('cylinder', { dia: r3(D + 2 * c), h: r3(s + 2 * c), seg: 64 }, [r3(x0(k) + s / 2), 0, r3(zc)], { rot: ROT, hole: true, name: 'すき間' });
+  const dc = Math.min(D * 0.55, D - 2.4), hc = dc / 2;
+  const coneA = [], recessB = [];
+  for (let k = 0; k < n - 1; k++) {
+    // The A knuckle of the pair pushes a cone into the B knuckle.
+    const fromA = k % 2 === 0;
+    const xf = fromA ? x0(k) + s : x0(k + 1);
+    const dir = fromA ? 1 : -1;
+    const rot = [0, dir * 90, 0];
+    // Pin: base sunk 0.3 mm into the A knuckle, tip hc past its face.
+    coneA.push(N('cone', { d1: r3(dc + 0.6), d2: 0.001, h: r3(hc + 0.3), seg: 48 }, [r3(xf + dir * (hc - 0.3) / 2), 0, r3(zc)], { rot, name: 'ピン' }));
+    // Recess: the pin's 45° surface moved out by c (apex moves c·√2 along the axis).
+    const apex = hc + c * Math.SQRT2, base = -0.5;
+    const hr = apex - base;
+    recessB.push(N('cone', { d1: r3(2 * hr), d2: 0.001, h: r3(hr), seg: 48 }, [r3(xf + dir * (apex + base) / 2), 0, r3(zc)], { rot, hole: true, name: 'ピン穴' }));
+  }
+  const mount = (side) => {
+    if (!p.holes || W < 10) return [];
+    const xs = L >= 30 ? [-L / 4, L / 4] : [0];
+    const y = side * (W * 0.58 + D * 0.15);
+    return xs.flatMap((x) => [
+      N('cylinder', { dia: 3.4, h: T + 2, seg: 32 }, [r3(x), r3(y), r3(T / 2)], { hole: true, name: '取付穴' }),
+      N('cone', { d1: 3.4, d2: 7, h: 1.8, seg: 32 }, [r3(x), r3(y), r3(T - 0.85)], { hole: true, name: '皿もみ' }),
+    ]);
+  };
+  const plate = (side) => N('box', { w: L, d: W, h: T, r: 0 }, [0, side * W / 2, T / 2], { name: '板' });
+  const ks = Array.from({ length: n }, (_, k) => k);
+  const A = ks.filter((k) => k % 2 === 0), B = ks.filter((k) => k % 2 === 1);
+  const leafA = G('蝶番 A', [
+    G('羽根 A', [plate(-1), ...B.map(clearance), ...mount(-1)], '#ffb020'),
+    ...A.map(knuckle), ...coneA,
+  ], '#ffb020');
+  const leafB = G('蝶番 B', [
+    G('羽根 B', [plate(1), ...A.map(clearance), ...mount(1)], '#4f9dff'),
+    ...B.map(knuckle), ...recessB,
+  ], '#4f9dff');
+  return [leafA, leafB];
+}
