@@ -77,6 +77,30 @@ export function analyzeSurface(pos, { angle = 30 } = {}) {
     D[t] = (n[0] * a[0] + n[1] * a[1] + n[2] * a[2]) / l;
     area[t] = l / 2;
     ok[t] = 1;
+    // Slivers thinner than 0.1 µm have meaningless normals, which would show up as false
+    // creases; they take the plane of a neighbour they lie in (below).
+    const L = Math.sqrt(Math.max(dot(sub(b, a), sub(b, a)), dot(sub(c, b), sub(c, b)), dot(sub(a, c), sub(a, c))));
+    if (l < 1e-4 * L) ok[t] = 2;
+  }
+  {
+    const around = Array.from({ length: nv }, () => []);
+    for (let t = 0; t < nt; t++) if (ok[t] === 1) for (let k = 0; k < 3; k++) around[tri[t * 3 + k]].push(t);
+    for (let t = 0; t < nt; t++) {
+      if (ok[t] !== 2) continue;
+      const pts = [0, 1, 2].map((k) => P(tri[t * 3 + k]));
+      let found = -1;
+      for (let k = 0; k < 3 && found < 0; k++) {
+        for (const g of around[tri[t * 3 + k]]) {
+          if (pts.every((p) => Math.abs(N[g * 3] * p[0] + N[g * 3 + 1] * p[1] + N[g * 3 + 2] * p[2] - D[g]) < TOL)) { found = g; break; }
+        }
+      }
+      // The surface's outward side is the neighbour's, whatever way the sliver happens to wind.
+      if (found >= 0) {
+        N[t * 3] = N[found * 3]; N[t * 3 + 1] = N[found * 3 + 1]; N[t * 3 + 2] = N[found * 3 + 2];
+        D[t] = D[found];
+      }
+      ok[t] = 1;
+    }
   }
   const nrm = (t) => [N[t * 3], N[t * 3 + 1], N[t * 3 + 2]];
   const onPlane = (t, p) => Math.abs(N[t * 3] * p[0] + N[t * 3 + 1] * p[1] + N[t * 3 + 2] * p[2] - D[t]) < TOL;

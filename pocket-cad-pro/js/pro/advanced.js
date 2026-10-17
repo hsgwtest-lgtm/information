@@ -368,7 +368,7 @@ export async function libraryDialog() {
         closeDialog();
         const full = await store.getLibrary(it.id);
         const meshIds = [];
-        const walk = (arr) => arr.forEach((n) => { if (n.kind === 'mesh') meshIds.push(n.dataId); if (n.children) walk(n.children); });
+        const walk = (arr) => arr.forEach((n) => { if (n.kind === 'mesh') meshIds.push(n.dataId); if (n.children) walk(n.children); if (n.src?.kind) walk([n.src]); });
         walk(full.nodes);
         for (const id of meshIds) if (!getMeshData(id)) { const d = await store.getMesh(id); if (d) registerMeshData(id, d); }
         insertBlock(full.nodes.map(deepClone), full.name);
@@ -398,7 +398,7 @@ export async function shareLinkDialog() {
   const body = [
     el('p', {}, '相手がこのリンクを開くと、このプロジェクトのコピーが相手の端末に作られ、そのまま編集・出力できます。'),
     el('p', { class: 'hint' }, `リンクの長さ: ${kb} KB`),
-    hasMesh ? el('div', { class: 'warnbox' }, '読み込んだ STL・リトフェインはリンクに含まれません（プロジェクトファイルで共有してください）。') : null,
+    hasMesh ? el('div', { class: 'warnbox' }, '読み込んだ STL・リトフェイン・格子・シェルの内側はリンクに含まれません（プロジェクトファイルで共有してください）。') : null,
     url.length > 60000 ? el('div', { class: 'warnbox' }, 'リンクが長いため、アプリによっては送れない場合があります。') : null,
   ];
   const d = document.getElementById('dlg');

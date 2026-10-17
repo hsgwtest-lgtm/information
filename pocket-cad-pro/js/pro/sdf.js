@@ -394,6 +394,7 @@ export function shellJob(pos, open, opts, progress = () => {}) {
   const grid = makeGrid(lo, hi, h, 3);
   const { nx, ny, nz, o } = grid;
   const bvh = bvhOf(pos);
+  const bvhIndex = bvh.geometry.index.array;
   const anyOpen = open && open.some((v) => v);
   let bvhX = bvh;
   if (anyOpen) {
@@ -419,7 +420,8 @@ export function shellJob(pos, open, opts, progress = () => {}) {
         p.set(x, y, z);
         const rf = bvh.closestPointToPoint(p, hit, 0, bandF);
         let rsd = ins ? -(rf ? rf.distance : bandF) : (rf ? rf.distance : bandF);
-        if (rf && anyOpen && open[rf.faceIndex]) rsd -= lift;
+        // The BVH reorders triangles: map its face index back to the input triangle.
+        if (rf && anyOpen && open[Math.floor(bvhIndex[rf.faceIndex * 3] / 3)]) rsd -= lift;
         const rx = anyOpen ? bvhX.closestPointToPoint(p, hitX, 0, bandX) : (rf && rf.distance <= bandX ? rf : bvh.closestPointToPoint(p, hitX, 0, bandX));
         const dx = rx ? rx.distance : bandX;
         F[id] = Math.max(rsd, t - dx);

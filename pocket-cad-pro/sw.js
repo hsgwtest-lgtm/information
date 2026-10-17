@@ -35,6 +35,7 @@ const ASSETS = [
   './js/pro/drawing.js',
   './js/pro/edges.js',
   './js/pro/edgeops.js',
+  './js/pro/meshfix.js',
   './js/pro/edgetools.js',
   './js/pro/subsel.js',
   './js/pro/sdf.js',

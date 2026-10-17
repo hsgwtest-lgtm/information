@@ -12,6 +12,7 @@ import { ISO, SIZES, threadGeometry } from './pro/threads.js';
 import { gearOutline } from './pro/gear.js';
 import { loftGeometry, chamferBoxLayers } from './pro/loft.js';
 import { filletSolid, blendSolid } from './pro/edgeops.js';
+import { fixTJunctions } from './pro/meshfix.js';
 
 let font = null;
 export function setFont(f) { font = f; }
@@ -466,7 +467,12 @@ function groupGeometry(node) {
     const b = nodeGeometry(c).boundingBox.clone().applyMatrix4(nodeMatrix(c, new Matrix4()));
     if (op === INTERSECTION && i > 0) bound.intersect(b); else bound.union(b);
   });
-  return dropStrays(out, bound);
+  const clean = dropStrays(out, bound);
+  const fixed = fixTJunctions(clean.getAttribute('position').array);
+  if (fixed === clean.getAttribute('position').array) return clean;
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(fixed, 3));
+  return g;
 }
 
 // Boolean results occasionally contain needles: zero-width slivers where nearly tangent

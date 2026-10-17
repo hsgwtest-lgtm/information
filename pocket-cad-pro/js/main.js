@@ -199,6 +199,8 @@ function forEachMesh(nodes, fn) {
   for (const n of nodes) {
     if (n.kind === 'mesh') fn(n);
     if (n.children) forEachMesh(n.children, fn);
+    // A lattice keeps the part it was made from (which may itself be a mesh).
+    if (n.src?.kind) forEachMesh([n.src], fn);
   }
 }
 
