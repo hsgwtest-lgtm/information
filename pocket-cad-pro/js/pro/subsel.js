@@ -20,9 +20,10 @@ export const active = () => !!S.id;
 const node = () => app.S.doc.nodes.find((n) => n.id === S.id);
 const keyOf = (n) => JSON.stringify([n.kind, n.params, n.scale, n.pos, n.rot, n.children?.length]);
 
-export function start(n, mode = 'edge') {
+export function start(n, mode = 'edge', hint = null) {
   if (!n) { toast('部品を 1 つ選択してください'); return; }
   if (n.hole) { toast('穴ではなくソリッドの部品を選んでください'); return; }
+  if (n.lattice) { toast('格子には使えません。「格子の設定」から元の形を編集してください', 3000); return; }
   const tris = app.vp.meshes.get(n.id)?.mesh.geometry.getAttribute('position').count / 3 || 0;
   if (tris > 400000) { toast('三角形が多すぎるため、辺・面を選べません', 3000); return; }
   S.id = n.id; S.mode = mode; S.chains.clear(); S.faces.clear();
@@ -38,7 +39,8 @@ export function start(n, mode = 'edge') {
   if (!S.group) { S.group = new Group(); S.group.renderOrder = 5; app.vp.scene.add(S.group); }
   redraw();
   app.updateToolBar();
-  if (mode === 'edge') toast(S.an.chains.length ? '丸めたい辺をタップ（もう一度タップで解除）' : 'この部品には選べる辺がありません', 2500);
+  if (hint) toast(hint, 3500);
+  else if (mode === 'edge') toast(S.an.chains.length ? '丸めたい辺をタップ（もう一度タップで解除）' : 'この部品には選べる辺がありません', 2500);
   else toast('面をタップして選択（もう一度タップで解除）', 2500);
 }
 
@@ -195,12 +197,20 @@ export function tap(hit, e) {
 // ---------------------------------------------------------------- tool bar
 
 const selChains = () => [...S.chains].map((i) => S.an.chains[i]);
+// A size limit rounded down to 0.1 mm, kept a hair below the exact limit (where the
+// fillets of two neighbouring edges would meet in a line).
+const floor1 = (v) => Math.floor((v - 1e-3) * 10) / 10;
 
 export function toolbarRows() {
   if (!S.id) return [];
   const btn = (label, fn, cls = '') => el('button', { type: 'button', class: 'btn tb-btn ' + cls, onclick: fn }, label);
   const close = el('button', { type: 'button', class: 'chip', 'aria-label': '終了', onclick: stop }, icon('close'));
-  const modeSeg = segmented([['edge', '辺'], ['face', '面']], S.mode, (v) => { S.mode = v; redraw(); app.updateToolBar(); });
+  const modeSeg = segmented([['edge', '辺'], ['face', '面']], S.mode, (v) => {
+    S.mode = v;
+    redraw();
+    app.updateToolBar();
+    toast(v === 'edge' ? '辺をタップして選択' : '面をタップして選択', 1500);
+  });
   let text;
   if (S.mode === 'edge') {
     const cs = selChains();
@@ -249,7 +259,7 @@ async function edgeDialog() {
       label: st.type === 'fillet' ? '半径 R mm' : '面取り C mm', value: sizes[st.type], min: 0.1, step: 0.5,
       onChange: (v) => { sizes[st.type] = v; },
     }));
-    limitBox.textContent = Number.isFinite(lim) ? `この辺には最大 約 ${fmt(Math.floor(lim * 10) / 10)} mm まで。` : '';
+    limitBox.textContent = Number.isFinite(lim) ? `この辺には最大 約 ${fmt(floor1(lim))} mm まで。` : '';
   };
   renderSize();
   const body = [
@@ -265,10 +275,12 @@ async function edgeDialog() {
   const lim = maxEdgeSize(S.an, cs, st.type);
   let r = sizes[st.type];
   let clipped = false;
-  if (r > lim) { r = Math.max(0.1, Math.floor(lim * 10) / 10); clipped = true; }
+  if (r > lim) { r = Math.max(0.1, floor1(lim)); clipped = true; }
   toast('計算中…', 1500);
   await new Promise((res) => setTimeout(res, 40));
   const g = filletEdges(n, S.an, cs, { type: st.type, r });
+  // Remembered so the size field in the panel can stop at the same limit later.
+  if (Number.isFinite(lim)) g.edgeOp.max = Math.max(0.1, floor1(lim));
   const ms = replaceNode(n, g);
   toast(`${cs.length} 本の辺を${st.type === 'fillet' ? `R${fmt(r)} で丸めました` : `C${fmt(r)} で面取りしました`}${clipped ? '（大きすぎたため小さくしました）' : ''}${ms > 1500 ? ` ・ ${(ms / 1000).toFixed(1)} 秒` : ''}`, 3000);
 }

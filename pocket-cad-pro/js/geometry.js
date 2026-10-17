@@ -3,7 +3,7 @@
 // into the geometry here, so meshes/brushes only carry position + rotation.
 import {
   BufferGeometry, Float32BufferAttribute, BoxGeometry, CylinderGeometry, SphereGeometry,
-  TorusGeometry, ExtrudeGeometry, LatheGeometry, Shape, Path, Vector2, Matrix4, Euler,
+  TorusGeometry, ExtrudeGeometry, LatheGeometry, Shape, Path, Vector2, Vector3, Box3, Matrix4, Euler,
   MathUtils, ShapeUtils, TextGeometry, RoundedBoxGeometry, mergeVertices, mergeGeometries,
   Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION,
 } from '../vendor/vendor.js';
@@ -11,7 +11,7 @@ import { flattenSketch } from './bezier.js';
 import { ISO, SIZES, threadGeometry } from './pro/threads.js';
 import { gearOutline } from './pro/gear.js';
 import { loftGeometry, chamferBoxLayers } from './pro/loft.js';
-import { filletSolid } from './pro/edgeops.js';
+import { filletSolid, blendSolid } from './pro/edgeops.js';
 
 let font = null;
 export function setFont(f) { font = f; }
@@ -204,7 +204,7 @@ function primitive(kind, p) {
     case 'pattern': return patternGeometry(p);
     case 'fillet': {
       // Built in the parent group's frame (the node sits at its origin), so not centered.
-      const f = filletSolid(p);
+      const f = p.chains ? blendSolid(p) : filletSolid(p);
       if (!f.length) return new BoxGeometry(0.01, 0.01, 0.01);
       const g = new BufferGeometry();
       g.setAttribute('position', new Float32BufferAttribute(f, 3));
@@ -228,7 +228,7 @@ function patternGeometry(p) {
     const hex = new Shape(Array.from({ length: 6 }, (_, k) => new Vector2(rc * Math.cos(k * Math.PI / 3), rc * Math.sin(k * Math.PI / 3))));
     proto = new ExtrudeGeometry(hex, { depth: p.depth, bevelEnabled: false }).translate(0, 0, -p.depth / 2);
   }
-  const base = proto.toNonIndexed();
+  const base = proto.index ? proto.toNonIndexed() : proto;
   for (const k of Object.keys(base.attributes)) if (k !== 'position') base.deleteAttribute(k);
   return mergeGeometries(p.pts.map(([x, y]) => base.clone().translate(x, y, 0)));
 }
@@ -459,6 +459,45 @@ function groupGeometry(node) {
   out.setAttribute('position', res.getAttribute('position').clone());
   if (res.index) out.setIndex(res.index.clone());
   out.applyMatrix4(first.matrixWorld);
+  // A boolean result cannot reach outside its solids (all of them for a union, their
+  // common part for an intersection); holes only remove material.
+  const bound = new Box3();
+  solids.forEach((c, i) => {
+    const b = nodeGeometry(c).boundingBox.clone().applyMatrix4(nodeMatrix(c, new Matrix4()));
+    if (op === INTERSECTION && i > 0) bound.intersect(b); else bound.union(b);
+  });
+  return dropStrays(out, bound);
+}
+
+// Boolean results occasionally contain needles: zero-width slivers where nearly tangent
+// faces meet (e.g. the ends of fillets at a corner) that can reach far outside the solid,
+// spoiling its size and "place on floor". Triangles with a corner outside the bounds the
+// result must lie in are such strays, as are triangles with no area at all.
+function dropStrays(g, bound) {
+  if (g.index) g = g.toNonIndexed();
+  const a = g.getAttribute('position').array;
+  const size = bound.isEmpty() ? 0 : bound.getSize(new Vector3()).length();
+  const tol = 1e-3 + size * 1e-5;
+  const x0 = bound.min.x - tol, y0 = bound.min.y - tol, z0 = bound.min.z - tol;
+  const x1 = bound.max.x + tol, y1 = bound.max.y + tol, z1 = bound.max.z + tol;
+  const keep = new Float32Array(a.length);
+  let o = 0;
+  for (let i = 0; i < a.length; i += 9) {
+    let out = false;
+    for (let k = i; k < i + 9; k += 3) {
+      if (a[k] < x0 || a[k] > x1 || a[k + 1] < y0 || a[k + 1] > y1 || a[k + 2] < z0 || a[k + 2] > z1) { out = true; break; }
+    }
+    if (out && size > 0) continue;
+    const ux = a[i + 3] - a[i], uy = a[i + 4] - a[i + 1], uz = a[i + 5] - a[i + 2];
+    const vx = a[i + 6] - a[i], vy = a[i + 7] - a[i + 1], vz = a[i + 8] - a[i + 2];
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    if (cx * cx + cy * cy + cz * cz === 0) continue;
+    keep.set(a.subarray(i, i + 9), o);
+    o += 9;
+  }
+  if (o === a.length) return g;
+  const out = new BufferGeometry();
+  out.setAttribute('position', new Float32BufferAttribute(keep.slice(0, o), 3));
   return out;
 }
 

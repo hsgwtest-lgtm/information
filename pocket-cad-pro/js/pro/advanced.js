@@ -58,6 +58,12 @@ export async function templatesDialog() {
   await openDialog({ title: 'テンプレート', body: [el('p', { class: 'hint' }, '寸法を入れるだけで、すぐ印刷できる形を作ります。作った後も部品単位で編集できます。'), list] });
 }
 
+// Opens one template's form directly (design-tool shortcuts).
+export function openTemplate(id) {
+  const t = TEMPLATES.find((x) => x.id === id);
+  if (t) templateParams(t);
+}
+
 async function templateParams(t) {
   const st = { ...Object.fromEntries(t.params.map(([k, , def]) => [k, def])), ...store.getSetting('tpl.' + t.id, {}) };
   if (t.text) { st.text = st.text || 'なまえ'; st.font = st.font || 'gothic'; }

@@ -65,15 +65,17 @@ function wrap(node, an) {
 
 const KEY = (p) => p.map((v) => Math.round(v * 1000)).join(',');
 
-// Corners where three selected convex, mutually perpendicular edges meet (and nothing
-// else): a sphere-blended corner instead of the pointed meeting of three cylinders.
+// Corners where three selected convex, mutually perpendicular straight edges meet (and
+// nothing else): they get a sphere blend instead of the pointed meeting of three fillets.
+// Returns [{ V, u: [u1, u2, u3], ends: [[chain, 0 | 1], …] }] (u: along each edge, away
+// from the corner; end 0 = the chain starts at the corner).
 function sphereCorners(an, chains) {
   const ends = new Map(), all = new Map();
   const note = (map, c, i) => {
     const p = c.pts[i], k = KEY(p);
     const q = c.pts[i === 0 ? 1 : c.pts.length - 2];
     const l = map.get(k) || [];
-    l.push({ c, V: p, u: norm(sub(q, p)) });
+    l.push({ c, end: i === 0 ? 0 : 1, V: p, u: norm(sub(q, p)) });
     map.set(k, l);
   };
   for (const c of an.chains) if (!c.closed) { note(all, c, 0); note(all, c, c.pts.length - 1); }
@@ -81,26 +83,12 @@ function sphereCorners(an, chains) {
   const out = [];
   for (const [k, l] of ends) {
     if (l.length !== 3 || (all.get(k) || []).length !== 3 || !l.every((x) => x.c.convex)) continue;
+    if (new Set(l.map((x) => x.c)).size !== 3) continue;
     const [a, b, c] = l.map((x) => x.u);
     if (Math.abs(dot(a, b)) > 0.05 || Math.abs(dot(a, c)) > 0.05 || Math.abs(dot(b, c)) > 0.05) continue;
-    out.push({ V: l[0].V, u: [a, b, c] });
+    out.push({ V: l[0].V, u: [a, b, c], ends: l.map((x) => [x.c, x.end]) });
   }
   return out;
-}
-
-// Box (corner of the part, slightly enlarged outward) minus the blending sphere.
-function cornerNode(corner, r, c) {
-  const e = 0.05;
-  let [u1, u2, u3] = corner.u;
-  if (dot(cross(u1, u2), u3) < 0) [u2, u3] = [u3, u2];
-  const V = sub(corner.V, c);
-  const center = add(V, mul(add(add(u1, u2), u3), (r - e) / 2));
-  const box = N('box', { w: r + e, d: r + e, h: r + e, r: 0 }, center, { rot: eulerFromAxes(u1, u2, u3), name: '角' });
-  const sph = N('sphere', { dia: 2 * r, seg: 48 }, add(V, mul(add(add(u1, u2), u3), r)), { hole: true, name: '球' });
-  const g = G('角の丸め', [box, sph]);
-  g.hole = true;
-  g.corner = { V: V.map(r3), u: [u1, u2, u3].map((u) => u.map((v) => Math.round(v * 1e5) / 1e5)) };
-  return g;
 }
 
 // Largest fillet radius / chamfer size the selected edges can take: the fillet must end
@@ -129,16 +117,54 @@ export function maxEdgeSize(an, chains, type) {
 }
 
 // Rounds (fillet) or bevels (chamfer) the given chains of `node`. Returns the new group.
+// Fillets that meet at sphere corners are built together as one solid (blendSolid).
 export function filletEdges(node, an, chains, { type = 'fillet', r = 1 } = {}) {
   const { g, c } = wrap(node, an);
+  const rel = (p) => sub(p, c).map(r3);
+  const unit = (u) => u.map((v) => Math.round(v * 1e5) / 1e5);
+  const name = type === 'chamfer' ? '面取り' : 'フィレット';
+  const corners = type === 'fillet' ? sphereCorners(an, chains) : [];
+  // Chains joined through corners form networks (union-find over the chains).
+  const parent = new Map(chains.map((ch) => [ch, ch]));
+  const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
+  const endsAt = new Map(); // chain -> [corner at start, corner at end]
+  corners.forEach((k, ki) => {
+    for (const [ch, end] of k.ends) {
+      const e = endsAt.get(ch) || [-1, -1];
+      e[end] = ki;
+      endsAt.set(ch, e);
+      parent.set(find(ch), find(k.ends[0][0]));
+    }
+  });
+  const nets = new Map();
   for (const ch of chains) {
-    const pk = packChain(ch);
-    pk.pts = pk.pts.map((p) => sub(p, c).map(r3));
-    const f = N('fillet', { type, r, ...pk }, [0, 0, 0], { hole: !pk.concave, name: type === 'chamfer' ? '面取り' : 'フィレット' });
-    f.params = { type, r, sym: true, ...pk };
+    if (!endsAt.has(ch)) {
+      const pk = packChain(ch);
+      pk.pts = pk.pts.map(rel);
+      const f = N('fillet', {}, [0, 0, 0], { hole: !pk.concave, name });
+      f.params = { type, r, sym: true, ...pk };
+      g.children.push(f);
+      continue;
+    }
+    const root = find(ch);
+    if (!nets.has(root)) nets.set(root, []);
+    nets.get(root).push(ch);
+  }
+  for (const list of nets.values()) {
+    const ids = [...new Set(list.flatMap((ch) => endsAt.get(ch).filter((k) => k >= 0)))];
+    const local = new Map(ids.map((k, i) => [k, i]));
+    const f = N('fillet', {}, [0, 0, 0], { hole: true, name });
+    f.params = {
+      type, r, sym: true,
+      chains: list.map((ch) => {
+        const pk = packChain(ch);
+        const [k0, k1] = endsAt.get(ch);
+        return { pts: pk.pts.map(rel), na: pk.na, nb: pk.nb, c0: k0 >= 0 ? local.get(k0) : -1, c1: k1 >= 0 ? local.get(k1) : -1 };
+      }),
+      corners: ids.map((k) => ({ V: rel(corners[k].V), u: corners[k].u.map(unit) })),
+    };
     g.children.push(f);
   }
-  if (type === 'fillet') for (const corner of sphereCorners(an, chains)) g.children.push(cornerNode(corner, r, c));
   g.edgeOp = { type, r };
   return g;
 }
@@ -150,21 +176,18 @@ export function setEdgeSize(g, type, r) {
       ch.params = { ...ch.params, r };
       if (type === 'chamfer') delete ch.params.r2;
     }
-    if (ch.corner && type === 'fillet') {
-      const fresh = cornerNode({ V: ch.corner.V, u: ch.corner.u }, r, [0, 0, 0]);
-      ch.children = fresh.children;
-    }
   }
-  if (g.edgeOp?.type === type) g.edgeOp = { type, r };
+  if (g.edgeOp?.type === type) g.edgeOp = { ...g.edgeOp, r };
 }
 
-// Fillet / chamfer children of a group, by type: { fillet: { n, r }, chamfer: { n, r } }.
+// Fillet / chamfer children of a group, by type: { fillet: { n, r }, chamfer: { n, r } }
+// (n counts edges: a network solid holds several).
 export function edgeSummary(g) {
   const out = {};
   for (const ch of g.children || []) {
     if (ch.kind !== 'fillet' || ch.params.sym === false) continue;
     const s = out[ch.params.type] || (out[ch.params.type] = { n: 0, r: ch.params.r });
-    s.n++;
+    s.n += ch.params.chains ? ch.params.chains.length : 1;
   }
   return out;
 }

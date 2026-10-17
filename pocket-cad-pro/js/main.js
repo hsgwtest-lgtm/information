@@ -18,8 +18,13 @@ import * as adv from './pro/advanced.js';
 import * as topo from './pro/topology.js';
 import * as orient from './pro/orient.js';
 import * as nest from './pro/nest.js';
+import * as subsel from './pro/subsel.js';
+import * as lattice from './pro/lattice.js';
+import * as printfix from './pro/printfix.js';
+import * as photofit from './pro/photofit.js';
+import * as snapfit from './pro/snapfit.js';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const COLORS = ['#4f9dff', '#ffb020', '#ef5f56', '#57c26a', '#b07cff', '#f2f2f2', '#40464f', '#ff8ad8'];
 const SNAPS = [0.1, 0.5, 1, 5, 10];
 const MATERIALS = [['PLA', 1.24], ['PETG', 1.27], ['ABS', 1.04], ['ASA', 1.07], ['TPU', 1.21], ['レジン', 1.15]];
@@ -27,6 +32,9 @@ const ADD_ORDER = ['box', 'cylinder', 'sphere', 'cone', 'tube', 'prism', 'torus'
 // Design tools shown under the basic shapes: [label, icon, action]
 const DESIGN_TOOLS = [
   ['形状最適化', 'topo', () => topo.topologyDialog()],
+  ['写真で採寸', 'paperfit', () => photofit.photoFitDialog()],
+  ['スナップ', 'snap', () => snapfit.snapFitDialog()],
+  ['蝶番', 'hinge', () => adv.openTemplate('hinge')],
   ['テンプレート', 'template', () => adv.templatesDialog()],
   ['マイパーツ', 'library', () => adv.libraryDialog()],
   ['ボルト', 'bolt', () => pro.addBolt('bolt')],
@@ -98,6 +106,7 @@ function commit({ panel = true } = {}) {
   $('btn-undo').disabled = !S.undo.length;
   $('btn-redo').disabled = !S.redo.length;
   pro.onCommit();
+  subsel.onCommit();
   scheduleSave();
 }
 
@@ -445,6 +454,19 @@ function renderSheet() {
   );
   if (!single) acts.append(actionBtn('整列', 'align', alignDialog));
   if (single) {
+    const solid = !single.hole;
+    if (solid && !single.lattice) {
+      acts.append(
+        actionBtn('辺・面', 'edge', () => (subsel.active() ? subsel.stop() : subsel.start(single, 'edge')), { on: subsel.active() }),
+        actionBtn('シェル', 'shell', () => subsel.start(single, 'face', '開ける面をタップして選び、下の「シェル」を押してください（選ばなければ中に空洞）')),
+      );
+    }
+    if (solid) {
+      acts.append(
+        actionBtn(single.lattice ? '格子の設定' : '格子化', 'lattice', () => lattice.latticeDialog(single)),
+        actionBtn('サポートレス', 'nosupport', printfix.printFixDialog),
+      );
+    }
     acts.append(
       actionBtn('向き最適化', 'orient', orient.orientDialog),
       actionBtn('敷き詰め', 'fill', () => nest.nestDialog('fill')),
@@ -972,6 +994,7 @@ async function settingsDialog() {
 let dragStart = null;
 const viewportHandlers = {
   onTap(id, hit, e) {
+    if (subsel.tap(hit, e)) return;
     if (adv.placeTap(hit)) return;
     if (pro.measureTap(hit, e)) return;
     if (!id) {
@@ -998,9 +1021,12 @@ const viewportHandlers = {
     renderSheet();
     scheduleSave();
   },
+  // While picking edges / faces a drag orbits the view instead of moving the part.
+  isLocked: () => subsel.active(),
 };
 
-// ---------------------------------------------------------------- Pro tool bar (measure / section)
+// ---------------------------------------------------------------- Pro tool bar (measure / section / edges)
+let lastSubsel = false;
 function updateToolBar() {
   const bar = $('toolbar');
   bar.replaceChildren();
@@ -1019,7 +1045,11 @@ function updateToolBar() {
     bar.append(el('div', { class: 'tb-row' },
       segmented([[0, 'X'], [1, 'Y'], [2, 'Z']], c.axis, (v) => { pro.setClip(v, null); updateToolBar(); }), range, label, close(pro.stopClip)));
   }
+  bar.append(...subsel.toolbarRows());
   bar.hidden = !bar.children.length;
+  // The action buttons show whether edge / face picking is on.
+  const on = subsel.active();
+  if (on !== lastSubsel) { lastSubsel = on; if (S.sel.length) renderSheet(); }
 }
 
 // ---------------------------------------------------------------- boot
@@ -1035,6 +1065,12 @@ async function init() {
   topo.initTopology(api);
   orient.initOrient(api);
   nest.initNest(api);
+  subsel.initSubsel(api);
+  lattice.initLattice(api);
+  printfix.initPrintFix(api);
+  photofit.initPhotoFit(api);
+  snapfit.initSnapFit(api);
+  subsel.onShell((n, an, ids) => lattice.shellDialog(n, an, ids));
   $('btn-tools').onclick = pro.toolsDialog;
 
   try {
@@ -1077,7 +1113,7 @@ async function init() {
     else if (mod && e.key.toLowerCase() === 'g') { e.preventDefault(); e.shiftKey ? cmd.ungroup() : cmd.group(); }
     else if (mod && e.key.toLowerCase() === 'a') { e.preventDefault(); cmd.selectAll(); }
     else if (e.key === 'Delete' || e.key === 'Backspace') cmd.remove();
-    else if (e.key === 'Escape') { S.sel = []; commit(); }
+    else if (e.key === 'Escape') { if (subsel.active()) subsel.stop(); else { S.sel = []; commit(); } }
     else if (e.key === 'Shift') setMulti(true);
   });
   document.addEventListener('keyup', (e) => { if (e.key === 'Shift') setMulti(false); });

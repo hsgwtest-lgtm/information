@@ -1,7 +1,7 @@
 // Feature UI: parametric parts, image/text tools, analysis, versions.
 // `app` is the small API main.js exposes (state, node helpers, viewport).
 import { Matrix4, Vector3 } from '../../vendor/vendor.js';
-import { el, icon, toast, openDialog, closeDialog, numField, segmented, fmt, confirmDialog, promptDialog, saveFile } from '../ui.js';
+import { el, icon, toast, openDialog, closeDialog, numField, segmented, fmt, confirmDialog, promptDialog, saveFile, pickFile } from '../ui.js';
 import { buildDrawing } from './drawing.js';
 import * as adv from './advanced.js';
 import { topologyDialog } from './topology.js';
@@ -13,6 +13,12 @@ import { gearInfo } from './gear.js';
 import { textToShapes, imageToShapes, svgToShapes, loadImage, countPoints, FONTS } from './trace.js';
 import { lithophaneMesh } from './lithophane.js';
 import { overhangs, estimatePrint, formatDuration, PRINT_DEFAULTS } from './analysis.js';
+import { edgeSummary, setEdgeSize } from './edgetools.js';
+import * as subsel from './subsel.js';
+import { latticeDialog } from './lattice.js';
+import { printFixDialog } from './printfix.js';
+import { photoFitDialog } from './photofit.js';
+import { snapFitDialog } from './snapfit.js';
 import * as store from '../storage.js';
 
 let app;
@@ -21,20 +27,7 @@ export function initFeatures(api) { app = api; }
 const round = (v) => Math.round(v * 1000) / 1000;
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
-// Opens the file picker synchronously (iOS only allows it inside the tap handler).
-export function pickFile(accept) {
-  const inp = document.createElement('input');
-  inp.type = 'file';
-  inp.accept = accept;
-  inp.style.display = 'none';
-  document.body.append(inp);
-  const p = new Promise((resolve) => {
-    inp.onchange = () => { resolve(inp.files[0] || null); inp.remove(); };
-    inp.addEventListener('cancel', () => { resolve(null); inp.remove(); });
-  });
-  inp.click();
-  return p;
-}
+export { pickFile };
 
 // ---------------------------------------------------------------- parametric parts
 export function addBolt(variant) {
@@ -66,6 +59,29 @@ export function propsExtras(n) {
   }
   if (n.topo && app.S.doc.nodes.includes(n)) {
     out.push(el('button', { type: 'button', class: 'btn', style: { width: '100%', marginBottom: '6px' }, onclick: () => topologyDialog(n) }, icon('topo'), '条件を変えて再最適化'));
+  }
+  if (n.kind === 'group') {
+    // Rounded / bevelled edges made with 辺・面: one size field per kind.
+    const sum = edgeSummary(n);
+    const rows = Object.entries(sum).map(([type, s]) => numField({
+      label: `${type === 'fillet' ? '丸め R' : '面取り C'} mm（${s.n} 本）`, value: s.r, min: 0.1, step: 0.5,
+      max: n.edgeOp?.type === type && n.edgeOp.max ? n.edgeOp.max : Infinity,
+      onChange: (v) => { app.checkpoint('edge.' + type); setEdgeSize(n, type, v); app.commit(); },
+    }));
+    if (rows.length) {
+      out.push(el('div', { class: 'sec' }, el('div', { class: 'sec-h' }, el('span', {}, '辺の丸め・面取り')),
+        el('div', { class: 'row ' + (rows.length > 1 ? 'two' : 'one') }, rows),
+        el('p', { class: 'hint' }, n.edgeOp?.max ? `最大 ${fmt(n.edgeOp.max)} mm まで。「解除」で丸める前の形に戻せます。` : '「解除」で丸める前の形に戻せます。')));
+    }
+    if (n.shell) {
+      out.push(el('p', { class: 'hint' }, `中空（壁 ${fmt(n.shell.thick)} mm${n.shell.open ? `・開いた面 ${n.shell.open} 枚` : '・閉じた空洞'}）。「解除」で元の形と内側の形に分かれます。`));
+    }
+  }
+  if (n.lattice && n.src && app.S.doc.nodes.includes(n)) {
+    out.push(el('button', { type: 'button', class: 'btn', style: { width: '100%', marginBottom: '6px' }, onclick: () => latticeDialog(n) }, icon('lattice'), '格子の設定を変える'));
+  }
+  if (n.snap) {
+    out.push(el('p', { class: 'hint' }, `スナップフック（腕 ${fmt(n.snap.L)} mm・厚み ${fmt(n.snap.t)} mm・かかり ${fmt(n.snap.y)} mm）。寝かせた向きのまま印刷してください。`));
   }
   return out;
 }
@@ -216,7 +232,7 @@ export async function imageDialog() {
     info.textContent = result ? outlineStats(result) : (svgText ? '塗りつぶしのある図形が見つかりませんでした（線だけの SVG は未対応）' : info.textContent);
   };
   const renderOpts = () => {
-    opts.replaceChildren(
+    opts.replaceChildren(...[
       el('div', { class: 'row two' },
         numField({ label: '幅 mm', value: st.width, min: 1, step: 5, onChange: (v) => { st.width = v; update(); } }),
         numField({ label: '厚み mm', value: st.h, min: 0.2, step: 0.5, onChange: (v) => { st.h = v; } })),
@@ -224,7 +240,7 @@ export async function imageDialog() {
         el('input', { type: 'range', min: 5, max: 95, value: Math.round(st.threshold * 100), class: 'range',
           onchange: (e) => { st.threshold = e.target.value / 100; renderOpts(); update(); } })),
       svgText ? null : el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: st.invert, onchange: (e) => { st.invert = e.target.checked; update(); } }), '白黒を反転（黒地に白い絵）'),
-    );
+    ].filter(Boolean));
   };
   const choose = el('button', {
     type: 'button', class: 'btn accent', style: { width: '100%' },
@@ -405,10 +421,24 @@ export async function toolsDialog() {
   const item = (ic, title, desc, fn) => el('button', { type: 'button', class: 'tool-row', onclick: () => { closeDialog(); fn(); } },
     icon(ic), el('div', {}, el('b', {}, title), el('span', {}, desc)));
   const head = (t) => el('div', { class: 'sec-h', style: { margin: '10px 2px 2px' } }, el('span', {}, t));
-  const one = app.selNodes().length === 1;
+  const sel = app.selNodes();
+  const one = sel.length === 1;
+  const solid = one && !sel[0].hole ? sel[0] : null;
+  const needOne = '部品を 1 つ選んでから使います';
+  const withSolid = (fn) => () => (solid ? fn(solid) : toast('部品を 1 つ選択してください'));
   await openDialog({
     title: 'ツール',
     body: el('div', { class: 'list' },
+      head('形を整える'),
+      item('edge', '辺の丸め・面取り', solid ? '辺をタップして選び、フィレット（R）や面取り（C）を付ける。へこんだ辺は肉盛りに' : needOne, withSolid((n) => subsel.start(n, 'edge'))),
+      item('face', '面の押し出し', solid ? '平らな面をタップして選び、垂直に押し出す・へこませる' : needOne, withSolid((n) => subsel.start(n, 'face'))),
+      item('shell', 'シェル（中空化）', solid ? '指定した厚みの壁を残して中をくり抜く。開ける面を選べば容器に' : needOne,
+        withSolid((n) => subsel.start(n, 'face', '開ける面をタップして選び、下の「シェル」を押してください（選ばなければ中に空洞）'))),
+      item('lattice', '格子化（ボロノイ・ジャイロイド）', solid ? '部品をボロノイの網目や骨組み、ジャイロイド格子に変換して軽くする' : needOne, withSolid((n) => latticeDialog(n))),
+      head('作る'),
+      item('paperfit', '写真で採寸', 'A4 などの紙に置いて撮るだけで実寸を測り、ぴったりのトレー・型板・輪郭を作る', () => photoFitDialog()),
+      item('snap', 'スナップフィット設計', '材料が割れないひずみで、はめ込み式のフックと受けを作る', () => snapFitDialog()),
+      item('hinge', '蝶番（そのまま動く）', '組み立て不要。一度の印刷で最初から回る蝶番', () => adv.openTemplate('hinge')),
       head('最適化'),
       item('topo', '形状の最適化（トポロジー）', '固定する所と力のかかる所から、必要な所だけ材料を残した軽くて強い形を自動で作る', () => topologyDialog()),
       item('orient', '向きの最適化', one ? 'サポート量・印刷時間・接地面積を比べて、印刷しやすい置き方を選ぶ' : '部品を 1 つ選んでから使います', orientDialog),
@@ -420,6 +450,7 @@ export async function toolsDialog() {
       item('place', '面に配置', '選択中の部品を、タップした面にぴったり載せる', adv.startPlace),
       item('vars', '変数（寸法駆動）', '「壁厚」などの変数で複数の寸法をまとめて変更', () => adv.variablesDialog()),
       head('印刷準備'),
+      item('nosupport', 'サポートレス化', solid ? '横穴をティアドロップに、張り出しの下に 45° の補強、底の辺を面取り' : needOne, () => (solid ? printFixDialog() : toast('部品を 1 つ選択してください'))),
       item('overhang', T.overhang ? 'オーバーハング表示を消す' : 'オーバーハングを表示', 'サポートが必要な面を赤く表示', () => toggleOverhang()),
       item('clock', '印刷見積もり', '印刷時間・フィラメント量・材料費', estimateDialog),
       head('確認・共有'),

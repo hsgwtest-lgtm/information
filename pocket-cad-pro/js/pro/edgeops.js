@@ -514,14 +514,20 @@ function section(P, t, na, nb, p, K) {
   const tb = sub(Tb, O);
   const e2 = norm(sub(tb, mul(e1, dot(tb, e1))));
   const phi = Math.atan2(dot(tb, e2), dot(tb, e1));
-  ring.push(off(Ta, na), Ta);
-  for (let k = 1; k < K; k++) {
-    const a = (phi * k) / K;
-    ring.push(add(O, add(mul(e1, r * Math.cos(a)), mul(e2, r * Math.sin(a)))));
-  }
-  ring.push(Tb, off(Tb, nb));
+  // The arc is drawn 0.5 % wider than r, so it cuts into the faces at a shallow angle
+  // (about 6°) instead of touching them: surfaces that merely touch leave the boolean
+  // with near-coincident triangles, where neighbouring fillets cross at corners.
+  const rr = r * (1 + ARC_GROW);
+  const at = (a) => add(O, add(mul(e1, rr * Math.cos(a)), mul(e2, rr * Math.sin(a))));
+  const A0 = at(0), A1 = at(phi);
+  ring.push(off(A0, na), A0);
+  for (let k = 1; k < K; k++) ring.push(at((phi * k) / K));
+  ring.push(A1, off(A1, nb));
   return ring;
 }
+
+// Relative growth of fillet arcs (see section) and the matching shrink of corner spheres.
+export const ARC_GROW = 0.005;
 
 // Sweep of the cross-section along a chain. p: { type: 'fillet' | 'chamfer', r, r2?,
 // concave, closed, pts, na, nb, ext?, eps? }. Returns a Float32Array triangle soup
@@ -537,7 +543,9 @@ export function filletSolid(p) {
     return norm(add(norm(sub(pts[i + 1], pts[i])), norm(sub(pts[i], pts[i - 1]))));
   });
   if (!p.closed) {
-    const ext = p.ext ?? 0.05;
+    // Cutters run a little past the part so they cut cleanly; fillers (concave edges) end
+    // flush with the part's end faces, so they neither stick out nor leave a lip.
+    const ext = p.ext ?? (p.concave ? 0 : 0.05);
     pts[0] = sub(pts[0], mul(tan[0], ext));
     pts[m - 1] = add(pts[m - 1], mul(tan[m - 1], ext));
   }
@@ -560,6 +568,182 @@ export function filletSolid(p) {
     for (let k = 1; k < R - 1; k++) { tri(A[0], A[k + 1], A[k]); tri(B[0], B[k], B[k + 1]); }
   }
   const f = new Float32Array(out);
+  if (signedVolume(f) < 0) {
+    for (let i = 0; i < f.length; i += 9) for (let k = 0; k < 3; k++) { const t = f[i + 3 + k]; f[i + 3 + k] = f[i + 6 + k]; f[i + 6 + k] = t; }
+  }
+  return f;
+}
+
+// ---------------------------------------------------------------- fillet networks
+//
+// Convex edges that meet three at a time at square corners (all edges of a box, say) are
+// rounded as one solid: each edge's sweep stops where the corner begins, and the corner is
+// a patch of the sphere that blends the three fillets, its rim made of the very points
+// that end the sweeps. Built as separate pieces (sweeps through the corner plus a box minus
+// a sphere), the boolean would see surfaces that merely touch and leave slivers.
+//
+// p: { r, chains: [{ pts, na, nb, c0, c1 }], corners: [{ V, u: [u1, u2, u3] }], ext?, eps? }
+// c0 / c1: index of the corner at the chain's first / last point, or -1 for a free end.
+export function blendSolid(p) {
+  const r = p.r, K = arcSegments(r);
+  const rr = r * (1 + ARC_GROW);
+  const q = { ...p, type: 'fillet', concave: false, eps: p.eps ?? Math.max(0.05, 3 * r * ARC_GROW) };
+  const tris = [];
+  const ringsAt = p.corners.map(() => []);
+  for (const ch of p.chains) {
+    let pts = ch.pts.map((v) => [...v]), na = ch.na, nb = ch.nb;
+    // Cut the chain back to where each corner's sphere begins (r along the edge).
+    if (ch.c0 >= 0) ({ pts, na, nb } = trimChain(pts, na, nb, r));
+    if (ch.c1 >= 0) {
+      const rev = trimChain([...pts].reverse(), [...na].reverse(), [...nb].reverse(), r);
+      pts = rev.pts.reverse(); na = rev.na.reverse(); nb = rev.nb.reverse();
+    }
+    const m = pts.length;
+    const tan = pts.map((_, i) => (i === m - 1 ? norm(sub(pts[m - 1], pts[m - 2])) : norm(sub(pts[i + 1], pts[i]))));
+    const ext = p.ext ?? 0.05;
+    if (ch.c0 < 0) pts[0] = sub(pts[0], mul(tan[0], ext));
+    if (ch.c1 < 0) pts[m - 1] = add(pts[m - 1], mul(tan[m - 1], ext));
+    const rings = pts.map((P, i) => section(P, tan[i], na[i], nb[i], q, K));
+    const R = rings[0].length;
+    for (let i = 0; i < m - 1; i++) {
+      const A = rings[i], B = rings[i + 1];
+      for (let k = 0; k < R; k++) {
+        const k2 = (k + 1) % R;
+        tris.push([A[k], A[k2], B[k2]], [A[k], B[k2], B[k]]);
+      }
+    }
+    const cap = (ring) => { for (let k = 1; k < R - 1; k++) tris.push([ring[0], ring[k + 1], ring[k]]); };
+    if (ch.c0 < 0) cap(rings[0]); else ringsAt[ch.c0].push(rings[0]);
+    if (ch.c1 < 0) cap(rings[m - 1]); else ringsAt[ch.c1].push(rings[m - 1]);
+  }
+  p.corners.forEach((c, ci) => {
+    const rings = ringsAt[ci];
+    if (rings.length !== 3) { for (const ring of rings) for (let k = 1; k < ring.length - 1; k++) tris.push([ring[0], ring[k + 1], ring[k]]); return; }
+    cornerPatch(c, r, rr, K, rings, tris);
+  });
+  return orientedSoup(tris);
+}
+
+// Drops the first `d` mm of a chain (normals follow the points that are kept).
+function trimChain(pts, na, nb, d) {
+  let acc = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const L = len(sub(pts[i + 1], pts[i]));
+    if (acc + L >= d || i === pts.length - 2) {
+      const t = L > 1e-12 ? Math.min(1, Math.max(0, (d - acc) / L)) : 0;
+      const P = add(pts[i], mul(sub(pts[i + 1], pts[i]), t));
+      return { pts: [P, ...pts.slice(i + 1)], na: [na[i + 1], ...na.slice(i + 1)], nb: [nb[i + 1], ...nb.slice(i + 1)] };
+    }
+    acc += L;
+  }
+  return { pts, na, nb };
+}
+
+// Sphere patch closing the three sweeps that end at corner c, plus the outer cap.
+function cornerPatch(c, r, rr, K, rings, tris) {
+  const [u1, u2, u3] = c.u;
+  const C = add(c.V, mul(add(add(u1, u2), u3), r));
+  const tol = 1e-6 * (1 + r) * 50;
+  const near = (a, b) => len(sub(a, b)) < tol;
+  // Make the points the rings share bit-identical (they were computed separately).
+  const shared = [];
+  for (const ring of rings) for (let k = 0; k < ring.length; k++) {
+    const s = shared.find((v) => near(v, ring[k]));
+    if (s) ring[k] = s; else shared.push(ring[k]);
+  }
+  // Sphere grid: i + j + k = K; the rim (one index 0) uses uniform angles, like the sweeps.
+  const S = (i) => Math.sin((Math.PI * i) / (2 * K));
+  // Ring layout (section): [corner', A', A, arc …, B, B'] — the arc runs from A to B.
+  const arcPts = rings.flatMap((ring) => ring.slice(2, ring.length - 1));
+  const grid = new Map();
+  const at = (i, j) => {
+    const key = i * (K + 1) + j;
+    let v = grid.get(key);
+    if (v) return v;
+    const d = norm([S(i), S(j), S(K - i - j)]);
+    v = sub(C, add(add(mul(u1, rr * d[0]), mul(u2, rr * d[1])), mul(u3, rr * d[2])));
+    if (i === 0 || j === 0 || i + j === K) {
+      let best = null, bd = Infinity;
+      for (const a of arcPts) { const dd = len(sub(a, v)); if (dd < bd) { bd = dd; best = a; } }
+      if (best && bd < Math.max(tol, rr * 1e-4)) v = best;
+    }
+    grid.set(key, v);
+    return v;
+  };
+  for (let i = 0; i < K; i++) {
+    for (let j = 0; i + j < K; j++) {
+      tris.push([at(i, j), at(i + 1, j), at(i, j + 1)]);
+      if (i + j < K - 1) tris.push([at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)]);
+    }
+  }
+  // Outer cap: the rings' outside parts (end → offset → corner → offset → end) form a
+  // closed loop around the corner once the stretches two rings share are dropped.
+  const R = rings[0].length;
+  const outer = rings.map((ring) => [ring[R - 2], ring[R - 1], ring[0], ring[1], ring[2]]);
+  let loop = [...outer[0]];
+  const used = new Set([0]);
+  while (used.size < 3) {
+    const end = loop[loop.length - 1];
+    let next = -1, rev = false;
+    for (let i = 0; i < 3; i++) {
+      if (used.has(i)) continue;
+      if (outer[i][0] === end) { next = i; break; }
+      if (outer[i][outer[i].length - 1] === end) { next = i; rev = true; break; }
+    }
+    if (next < 0) break;
+    used.add(next);
+    const seg = rev ? [...outer[next]].reverse() : outer[next];
+    loop.push(...seg.slice(1));
+  }
+  if (loop[loop.length - 1] === loop[0]) loop.pop();
+  // Remove the back-and-forth spikes (… a, b, a …) left where two rings share a side.
+  let changed = true;
+  while (changed && loop.length > 3) {
+    changed = false;
+    for (let i = 0; i < loop.length; i++) {
+      const a = loop[(i - 1 + loop.length) % loop.length], b = loop[(i + 1) % loop.length];
+      if (a === b) { loop.splice(i, 1); loop.splice(i % loop.length, 1); changed = true; break; }
+    }
+  }
+  const Q = sub(c.V, mul(add(add(u1, u2), u3), Math.max(0.05, r * 0.02)));
+  for (let i = 0; i < loop.length; i++) tris.push([Q, loop[i], loop[(i + 1) % loop.length]]);
+}
+
+// Welds a list of triangles (to 1 nm), makes their winding consistent across shared
+// edges and outward-facing. Returns a Float32Array soup.
+function orientedSoup(tris) {
+  const ids = new Map(), P = [];
+  const id = (v) => {
+    const k = `${Math.round(v[0] * 1e6)},${Math.round(v[1] * 1e6)},${Math.round(v[2] * 1e6)}`;
+    let i = ids.get(k);
+    if (i === undefined) { i = P.length; ids.set(k, i); P.push(v); }
+    return i;
+  };
+  const T = tris.map((t) => t.map(id)).filter(([a, b, c]) => a !== b && b !== c && a !== c);
+  const edges = new Map();
+  T.forEach((t, ti) => { for (let k = 0; k < 3; k++) { const a = t[k], b = t[(k + 1) % 3]; const key = a < b ? `${a}_${b}` : `${b}_${a}`; (edges.get(key) || edges.set(key, []).get(key)).push(ti); } });
+  const seen = new Uint8Array(T.length);
+  for (let s = 0; s < T.length; s++) {
+    if (seen[s]) continue;
+    seen[s] = 1;
+    const stack = [s];
+    while (stack.length) {
+      const ti = stack.pop(), t = T[ti];
+      for (let k = 0; k < 3; k++) {
+        const a = t[k], b = t[(k + 1) % 3];
+        for (const ni of edges.get(a < b ? `${a}_${b}` : `${b}_${a}`)) {
+          if (seen[ni]) continue;
+          const n = T[ni];
+          // A neighbour with the same winding runs the shared edge the same way: flip it.
+          for (let j = 0; j < 3; j++) if (n[j] === a && n[(j + 1) % 3] === b) { [n[1], n[2]] = [n[2], n[1]]; break; }
+          seen[ni] = 1;
+          stack.push(ni);
+        }
+      }
+    }
+  }
+  const f = new Float32Array(T.length * 9);
+  T.forEach((t, i) => t.forEach((v, k) => f.set(P[v], i * 9 + k * 3)));
   if (signedVolume(f) < 0) {
     for (let i = 0; i < f.length; i += 9) for (let k = 0; k < 3; k++) { const t = f[i + 3 + k]; f[i + 3 + k] = f[i + 6 + k]; f[i + 6 + k] = t; }
   }

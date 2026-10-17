@@ -167,6 +167,22 @@ export function segmented(options, current, onPick) {
   return wrap;
 }
 
+// Opens the file picker synchronously (iOS only allows it inside the tap handler).
+// Resolves with the chosen File, or null when cancelled.
+export function pickFile(accept) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = accept;
+  inp.style.display = 'none';
+  document.body.append(inp);
+  const p = new Promise((resolve) => {
+    inp.onchange = () => { resolve(inp.files[0] || null); inp.remove(); };
+    inp.addEventListener('cancel', () => { resolve(null); inp.remove(); });
+  });
+  inp.click();
+  return p;
+}
+
 // Save a file: Web Share (iOS share sheet → "ファイルに保存") when possible, else download.
 export async function saveFile(blob, filename, preferShare = true) {
   const types = [blob.type, 'application/octet-stream'];

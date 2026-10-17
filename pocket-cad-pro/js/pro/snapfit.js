@@ -76,7 +76,7 @@ export async function snapFitDialog() {
     const c = snapCalc(st, m, st.use);
     const pct = (v) => `${(v * 100).toFixed(2)}%`;
     const kg = (v) => (v / 9.81 < 1 ? `${Math.round((v / 9.81) * 1000)} g 相当` : `${(v / 9.81).toFixed(1)} kg 相当`);
-    res.replaceChildren(
+    res.replaceChildren(...[
       el('dl', { class: 'stat' },
         el('dt', {}, '曲げたときのひずみ'), el('dd', { class: c.ok ? 'ok' : 'ng' }, `${pct(c.eps)}（許容 ${pct(c.allow)}）${c.ok ? ' ✓' : ' ⚠'}`),
         el('dt', {}, 'はめる力'), el('dd', {}, `${c.W.toFixed(1)} N（${kg(c.W)}）`),
@@ -85,7 +85,7 @@ export async function snapFitDialog() {
         : el('div', { class: 'warnbox' }, `ひずみが大きすぎて割れるおそれがあります。腕を ${fmt(c.Lmin)} mm 以上にするか、厚み・かかりを減らしてください。`,
           el('button', { type: 'button', class: 'btn', style: { marginTop: '6px', width: '100%' }, onclick: () => { st.L = c.Lmin; renderFields(); render(); } }, `腕の長さを ${fmt(c.Lmin)} mm にする`)),
       st.L < st.plate + 0.3 ? el('div', { class: 'warnbox' }, '腕が受けの板厚より短いため、かかりが板の裏に届きません。') : null,
-    );
+    ].filter(Boolean));
   };
   const fields = el('div');
   const renderFields = () => {

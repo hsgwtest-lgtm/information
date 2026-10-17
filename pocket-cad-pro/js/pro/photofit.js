@@ -2,10 +2,9 @@
 // above; the sheet's corners fix the scale and undo the perspective, so the objects'
 // outlines come out in real millimetres — as an outline, a stencil / jig plate with the
 // shape cut out, or a fitted tray with finger notches.
-import { el, icon, toast, openDialog, numField, segmented, fmt } from '../ui.js';
+import { el, icon, toast, openDialog, numField, segmented, fmt, pickFile } from '../ui.js';
 import * as store from '../storage.js';
 import { loadImage, maskToShapes } from './trace.js';
-import { pickFile } from './features.js';
 import { N, G } from './templates.js';
 
 let app;

@@ -91,7 +91,7 @@ const progressBar = () => {
 
 // ---------------------------------------------------------------- lattice
 
-const TYPES = [['surface', 'ボロノイ（表面）'], ['voronoi', 'ボロノイ（立体）'], ['gyroid', 'ジャイロイド']];
+const TYPES = [['surface', '表面ボロノイ'], ['voronoi', '立体ボロノイ'], ['gyroid', 'ジャイロイド']];
 const DEF = {
   surface: { cell: 10, width: 2.4, thick: 2 },
   voronoi: { cell: 10, width: 2.4, frame: 1 },
@@ -121,22 +121,22 @@ export async function latticeDialog(n) {
   const renderFields = () => {
     const p = per[st.type];
     const f = (k, label, min, step) => numField({ label, value: p[k], min, step, onChange: (v) => { p[k] = v; stale(); } });
-    const rows = [f('cell', 'セルの大きさ mm', 3, 1), f('width', st.type === 'gyroid' ? '壁の厚み mm' : '線の太さ mm', 0.8, 0.2)];
+    const rows = [f('cell', 'セル mm', 3, 1), f('width', st.type === 'gyroid' ? '壁の厚み mm' : '線の太さ mm', 0.8, 0.2)];
     if (st.type === 'surface') rows.push(f('thick', '網の厚み mm', 0.8, 0.2));
-    if (st.type === 'gyroid') rows.push(f('skin', '外皮 mm（0 = なし）', 0, 0.4));
-    fields.replaceChildren(
+    if (st.type === 'gyroid') rows.push(f('skin', '外皮 mm', 0, 0.4));
+    fields.replaceChildren(...[
       el('div', { class: 'row' }, rows),
       st.type === 'voronoi' ? el('label', { class: 'check' }, el('input', { type: 'checkbox', checked: !!p.frame, onchange: (e) => { p.frame = e.target.checked ? 1 : 0; stale(); } }), '表面にも網を付ける（骨の先がつながります）') : null,
       el('div', { class: 'row two', style: { marginTop: '6px' } },
         numField({ label: '模様の番号', value: st.seed, min: 1, step: 1, integer: true, onChange: (v) => { st.seed = v; stale(); } }),
         segmented([[0, '速い'], [1, '標準'], [2, '細かい']], st.quality, (v) => { st.quality = v; stale(); })),
-    );
+    ].filter(Boolean));
   };
   const hint = el('p', { class: 'hint' });
   const HINTS = {
     surface: '表面をボロノイの網目にします。ランプシェードや飾りに。中は空洞になります。',
     voronoi: '中まで骨組み状にします。軽くて丈夫なオブジェに。',
-    gyroid: '3D プリントの充填でも使われる曲面の格子。外皮を付けると中だけが格子になります。',
+    gyroid: '3D プリントの充填でも使われる曲面の格子。外皮（0 = なし）を付けると、中だけが格子になります。',
   };
   const preview = el('div', { class: 'lat-preview' }, el('span', { class: 'hint' }, '「プレビュー」で形を確認できます'));
   const stats = el('div');
@@ -157,12 +157,12 @@ export async function latticeDialog(n) {
       const tris = r.positions.length / 9;
       preview.style.opacity = '';
       preview.replaceChildren(renderPreview(r.positions, new Matrix4(), 2, n.color || '#4f9dff', 300, 200));
-      stats.replaceChildren(el('dl', { class: 'stat' },
+      stats.replaceChildren(...[el('dl', { class: 'stat' },
         el('dt', {}, '重さ'), el('dd', {}, `${grams(solidVol).toFixed(1)} g → ${grams(r.volume).toFixed(1)} g（${Math.round((1 - r.volume / solidVol) * 100)}% 軽量）`),
         el('dt', {}, '三角形'), el('dd', {}, `${tris.toLocaleString()}${r.dropped ? ` ・ 浮いた小片 ${r.dropped} 個を除去` : ''}`),
         el('dt', {}, '計算時間'), el('dd', {}, `${(result.ms / 1000).toFixed(1)} 秒`)),
         tris > 350000 ? el('div', { class: 'warnbox' }, '三角形がとても多いため、操作が重くなります。「速い」や大きめのセルがおすすめです。') : null,
-        r.pieces > 1 ? el('p', { class: 'hint' }, `${r.pieces} 個に分かれています。`) : null);
+        r.pieces > 1 ? el('p', { class: 'hint' }, `${r.pieces} 個に分かれています。`) : null].filter(Boolean));
       return result;
     } catch (e) {
       console.error(e);
