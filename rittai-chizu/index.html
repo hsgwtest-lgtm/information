@@ -1,0 +1,1307 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17232A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>立体地図工房</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&family=Shippori+Mincho+B1:wght@700;800&display=swap">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<style>
+/* Layout: a survey bench. The model stage stays in view (left on wide screens, top on phones);
+   the numbered survey steps run down the right like a field notebook. */
+:root{
+  --bg:#E9EDEA;          /* mist paper */
+  --surface:#FBFCFB;     /* notebook page */
+  --ink:#17232A;         /* survey ink */
+  --muted:#56676D;
+  --line:#CDD6D2;
+  --accent:#8A5426;      /* contour sepia, as on printed topo maps */
+  --accent-soft:#F1E4D6;
+  --on-accent:#FFFFFF;
+  --glow:#FFB347;        /* warm LED */
+  --stage:#243038;       /* model stage */
+  --stage-night:#0B0F12;
+  --ok:#2F7D57;
+  --warn:#A3471B;
+  --font-display:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
+  --font-body:"IBM Plex Sans JP","Hiragino Sans","Yu Gothic UI","Yu Gothic",system-ui,sans-serif;
+  --font-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1518; --surface:#162026; --ink:#E4EBE8; --muted:#94A4A6; --line:#283840;
+    --accent:#D69455; --accent-soft:#33261B; --on-accent:#1A1209; --glow:#FFC170;
+    --stage:#1B262C; --stage-night:#070A0C; --ok:#6CC596; --warn:#F08A5D; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1518; --surface:#162026; --ink:#E4EBE8; --muted:#94A4A6; --line:#283840;
+  --accent:#D69455; --accent-soft:#33261B; --on-accent:#1A1209; --glow:#FFC170;
+  --stage:#1B262C; --stage-night:#070A0C; --ok:#6CC596; --warn:#F08A5D; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:20px 40px}
+.mast{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 20px;padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.mast h1{font-family:var(--font-display);font-weight:800;font-size:clamp(26px,4.2vw,38px);letter-spacing:.06em;line-height:1.15;margin:0;text-wrap:balance}
+.mast p{margin:0;color:var(--muted);font-size:14px;max-width:46ch}
+.layout{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.stage-col{position:sticky;top:calc(env(safe-area-inset-top, 0px) + 12px);display:grid;gap:10px;min-width:0}
+@media (max-width:900px){.stage-col{position:static}}
+.stage{position:relative;aspect-ratio:4/3.3;max-width:100%;border-radius:var(--r);overflow:hidden;background:var(--stage);transition:background .5s ease}
+.stage.night{background:var(--stage-night)}
+@media (max-width:900px){.stage{aspect-ratio:1/1}}
+#gl{display:block;width:100%;height:100%;touch-action:none}
+.stage-bar{position:absolute;left:10px;right:10px;top:10px;display:flex;flex-wrap:wrap;gap:6px;justify-content:space-between;pointer-events:none}
+.stage-bar > *{pointer-events:auto}
+.seg-dark{display:inline-flex;background:rgba(10,14,16,.55);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:3px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.seg-dark button{appearance:none;border:0;background:transparent;color:#DCE4E1;font:500 13px/1 var(--font-body);padding:8px 12px;border-radius:999px;cursor:pointer}
+.seg-dark button[aria-pressed="true"]{background:#F3F0EA;color:#1A2228}
+.seg-dark button:focus-visible{outline:2px solid var(--glow);outline-offset:1px}
+.stage-note{position:absolute;left:12px;bottom:10px;right:12px;color:#C8D2CF;font:12px/1.4 var(--font-body);text-shadow:0 1px 2px rgba(0,0,0,.6);pointer-events:none}
+.stage-fallback{position:absolute;inset:0;display:grid;place-items:center;padding:24px;color:#DCE4E1;text-align:center;font-size:14px}
+.readout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:0}
+.readout div{background:var(--surface);padding:9px 12px;min-width:0}
+.readout dt{font-size:11px;letter-spacing:.08em;color:var(--muted)}
+.readout dd{margin:0;font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:14px;overflow-wrap:anywhere}
+@media (max-width:520px){.readout{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.panel{display:grid;gap:12px;min-width:0}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px 16px;display:grid;gap:12px;min-width:0}
+.step > header{display:flex;align-items:baseline;gap:10px}
+.step .no{font-family:var(--font-data);font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;min-width:24px;height:24px;display:inline-grid;place-items:center;flex:none}
+.step h2{font-family:var(--font-display);font-weight:700;font-size:19px;letter-spacing:.04em;margin:0}
+.step .hint{font-size:13px;color:var(--muted);margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{appearance:none;border:1px solid var(--line);background:transparent;color:var(--ink);font:500 14px/1.2 var(--font-body);padding:9px 14px;border-radius:999px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.chip:focus-visible,.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.seg button{appearance:none;border:0;background:transparent;color:var(--ink);font:600 15px/1.3 var(--font-body);padding:12px 10px;cursor:pointer;text-align:left;display:grid;gap:2px}
+.seg button small{font-weight:400;font-size:12px;color:var(--muted)}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);box-shadow:inset 0 -3px 0 var(--accent)}
+.field{display:grid;gap:4px;min-width:0}
+.field .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.field label{font-size:14px}
+.field output{font-family:var(--font-data);font-variant-numeric:tabular-nums;font-size:13px;color:var(--accent)}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px;margin:0}
+input[type=text],input[type=search]{width:100%;min-width:0;font:15px/1.4 var(--font-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row > input{flex:1 1 180px}
+.btn{appearance:none;border:1px solid var(--ink);background:transparent;color:var(--ink);font:600 14px/1.2 var(--font-body);padding:10px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-size:16px;padding:13px 18px}
+.btn[disabled]{opacity:.5;cursor:progress}
+.btn.quiet{border-color:var(--line)}
+.picker{position:relative;max-width:100%;aspect-ratio:1/1;border-radius:8px;overflow:hidden;background:var(--bg);border:1px solid var(--line)}
+#pick{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.coords{font-family:var(--font-data);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--muted);background:var(--bg);border-radius:8px;padding:10px 12px;margin:0}
+.results{display:grid;gap:6px}
+.results button{text-align:left}
+.files{margin:0;padding:0;list-style:none;display:grid;gap:4px;font-size:13px}
+.files li{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dashed var(--line);padding:4px 0}
+.files li span:last-child{font-family:var(--font-data);color:var(--muted);white-space:nowrap}
+.status{font-size:13px;min-height:1.4em;color:var(--muted)}
+.status.ok{color:var(--ok)} .status.err{color:var(--warn)}
+footer.credit{margin-top:22px;padding-top:12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:grid;gap:4px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <h1>立体地図工房</h1>
+    <p>場所と範囲を選ぶと、3Dプリント用の立体地図と、光るランプのデータができます。</p>
+  </header>
+
+  <div class="layout">
+    <section class="stage-col" aria-label="プレビュー">
+      <div class="stage" id="stage">
+        <canvas id="gl" aria-label="3Dプレビュー。ドラッグで回転、ピンチで拡大"></canvas>
+        <div class="stage-bar">
+          <div class="seg-dark" id="litSeg" hidden>
+            <button type="button" data-lit="0" aria-pressed="false">昼（消灯）</button>
+            <button type="button" data-lit="1" aria-pressed="true">夜（点灯）</button>
+          </div>
+          <div class="seg-dark"><button type="button" id="resetCam">正面に戻す</button></div>
+        </div>
+        <div class="stage-note" id="stageNote">ドラッグで回転、ピンチで拡大</div>
+        <div class="stage-fallback" id="glFallback" hidden>3D表示を読み込めませんでした。データの保存はこのまま使えます。</div>
+      </div>
+      <dl class="readout" id="readout"></dl>
+    </section>
+
+    <section class="panel" aria-label="設定">
+      <article class="step">
+        <header><span class="no">1</span><h2>場所</h2></header>
+        <div class="chips" id="placeChips">
+          <button type="button" class="chip" aria-pressed="true" id="sampleChip">富士山（サンプル）</button>
+        </div>
+        <div id="liveBox" hidden>
+          <div class="row">
+            <input type="search" id="q" placeholder="地名・住所・駅名（例：大山 伊勢原）" autocomplete="off">
+            <button type="button" class="btn" id="qGo">探す</button>
+            <button type="button" class="btn quiet" id="here">現在地</button>
+          </div>
+          <div class="results" id="results"></div>
+        </div>
+        <p class="note" id="sampleNote">このページでは、富士山周辺（約32km四方）の実際の標高データで試せます。GitHub Pagesなど普通のWebサーバーに置くと、地名を検索して日本中のどこでも作れるようになります。</p>
+        <div class="status" id="liveStatus" role="status"></div>
+      </article>
+
+      <article class="step">
+        <header><span class="no">2</span><h2>範囲</h2></header>
+        <p class="hint">四角をドラッグして位置を決めます。タップした所へ移動もできます。</p>
+        <div class="picker"><canvas id="pick" aria-label="範囲の選択。ドラッグで移動"></canvas></div>
+        <div class="field">
+          <div class="top"><label for="size">範囲の広さ</label><output id="sizeOut" for="size"></output></div>
+          <input type="range" id="size" min="1000" max="30000" step="500" value="20000">
+        </div>
+        <div class="coords" id="coords"></div>
+      </article>
+
+      <article class="step">
+        <header><span class="no">3</span><h2>作るもの</h2></header>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-mode="relief" aria-pressed="true">立体地図<small>山や街の凹凸を立体に</small></button>
+          <button type="button" data-mode="lamp" aria-pressed="false">光るランプ<small>後ろから光を当てて模様が浮かぶ</small></button>
+        </div>
+      </article>
+
+      <article class="step" id="reliefOpts">
+        <header><span class="no">4</span><h2>形の調整</h2></header>
+        <div class="field"><div class="top"><label for="rW">幅</label><output id="rWOut" for="rW"></output></div>
+          <input type="range" id="rW" min="80" max="230" step="5" value="150"></div>
+        <div class="field"><div class="top"><label for="rEx">高さの強調</label><output id="rExOut" for="rEx"></output></div>
+          <input type="range" id="rEx" min="1" max="4" step="0.1" value="1.5"></div>
+        <div class="field"><div class="top"><label for="rBase">台座の厚さ</label><output id="rBaseOut" for="rBase"></output></div>
+          <input type="range" id="rBase" min="2" max="10" step="0.5" value="4"></div>
+        <div class="chips" role="group" aria-label="精細さ">
+          <button type="button" class="chip" data-rres="std" aria-pressed="true">標準</button>
+          <button type="button" class="chip" data-rres="high" aria-pressed="false">高精細（データ大）</button>
+        </div>
+      </article>
+
+      <article class="step" id="lampOpts" hidden>
+        <header><span class="no">4</span><h2>模様と厚み</h2></header>
+        <div class="chips" role="group" aria-label="模様" id="styleChips">
+          <button type="button" class="chip" data-style="shade" aria-pressed="true">地形の陰影</button>
+          <button type="button" class="chip" data-style="contour" aria-pressed="false">等高線</button>
+          <button type="button" class="chip" data-style="city" aria-pressed="false" id="cityChip" hidden>街の道と建物</button>
+        </div>
+        <div class="field"><div class="top"><label for="lW">パネルの幅（模様の部分）</label><output id="lWOut" for="lW"></output></div>
+          <input type="range" id="lW" min="60" max="160" step="5" value="100"></div>
+        <div class="field"><div class="top"><label for="lC">明暗のメリハリ</label><output id="lCOut" for="lC"></output></div>
+          <input type="range" id="lC" min="0.6" max="1.8" step="0.05" value="1"></div>
+        <div class="field"><div class="top"><label for="lMin">いちばん薄い所</label><output id="lMinOut" for="lMin"></output></div>
+          <input type="range" id="lMin" min="0.6" max="1.4" step="0.1" value="0.8"></div>
+        <div class="field"><div class="top"><label for="lMax">いちばん厚い所</label><output id="lMaxOut" for="lMax"></output></div>
+          <input type="range" id="lMax" min="2" max="4" step="0.1" value="3"></div>
+        <div class="chips" role="group" aria-label="精細さ">
+          <button type="button" class="chip" data-lres="std" aria-pressed="true">標準</button>
+          <button type="button" class="chip" data-lres="high" aria-pressed="false">高精細（データ大）</button>
+        </div>
+      </article>
+
+      <article class="step">
+        <header><span class="no">5</span><h2>ルート</h2></header>
+        <p class="hint">登山やランニングの記録（GPXファイル）を読み込むと、歩いた道が浮き上がります。YAMAPやヤマレコから書き出せます。</p>
+        <div class="row">
+          <label class="btn" for="gpx" tabindex="0" id="gpxLabel">GPXを読み込む</label>
+          <input type="file" id="gpx" accept=".gpx,application/gpx+xml,application/xml,text/xml" class="vh">
+          <button type="button" class="btn quiet" id="demoRoute">仮ルートで試す</button>
+          <button type="button" class="btn quiet" id="fitRoute" hidden>範囲をルートに合わせる</button>
+          <button type="button" class="btn quiet" id="clearRoute" hidden>ルートを消す</button>
+        </div>
+        <div class="status" id="routeStatus" role="status"></div>
+      </article>
+
+      <article class="step">
+        <header><span class="no">6</span><h2>刻む文字</h2></header>
+        <div class="row"><input type="text" id="txt" maxlength="28" value="富士山 3776m" aria-label="刻む文字"></div>
+        <div class="field"><div class="top"><label for="tSize">文字の大きさ</label><output id="tSizeOut" for="tSize"></output></div>
+          <input type="range" id="tSize" min="4" max="12" step="0.5" value="8"></div>
+        <p class="hint">立体地図では手前の台に、ランプでは下の枠に入ります。空欄にすると文字なしです。</p>
+      </article>
+
+      <article class="step">
+        <header><span class="no">7</span><h2>保存</h2></header>
+        <ul class="files" id="fileList"></ul>
+        <div class="row"><button type="button" class="btn primary" id="save">STL一式を保存（ZIP）</button></div>
+        <div class="status" id="saveStatus" role="status"></div>
+        <p class="hint">iPhoneでは「ファイル」アプリでZIPをタップすると展開できます。STLはBambu Studioなどのスライサーで開けます。</p>
+      </article>
+    </section>
+  </div>
+
+  <footer class="credit">
+    <span id="credit"></span>
+    <span>STLの単位はmm。印刷のおすすめ設定はZIPの中の README.txt に入っています。</span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ================= data ================= */
+const SAMPLE_META = null;
+const SAMPLE_B64 = "";
+const EARTH_C = 40075016.686;
+const GSI_SEARCH = 'https://msearch.gsi.go.jp/address-search/AddressSearch';
+const gsiDem = (z, x, y) => `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`;
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const TEXT_FONT = '"IBM Plex Sans JP","Hiragino Sans","Yu Gothic",sans-serif';
+
+const $ = (s, el) => (el || document).querySelector(s);
+const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const fmt = (v, d) => Number(v).toLocaleString('ja-JP', {minimumFractionDigits: d || 0, maximumFractionDigits: d || 0});
+
+/* ================= geo ================= */
+function lonLatToMerc(lon, lat){
+  const s = Math.sin(lat * Math.PI / 180);
+  return [(lon + 180) / 360, 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)];
+}
+function mercToLonLat(x, y){
+  const n = Math.PI - 2 * Math.PI * y;
+  return [x * 360 - 180, 180 / Math.PI * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)))];
+}
+const mpm = lat => EARTH_C * Math.cos(lat * Math.PI / 180);
+
+/* ================= elevation sources ================= */
+function makeSampleSource(){
+  const m = SAMPLE_META, N = m.size, n = Math.pow(2, m.z);
+  const bin = atob(SAMPLE_B64);
+  const elev = new Float32Array(N * N);
+  for (let i = 0, k = 0; i < N * N; i++, k += 2) elev[i] = (bin.charCodeAt(k) | (bin.charCodeAt(k + 1) << 8)) / 10;
+  return {kind: 'sample', name: m.name, slug: 'fuji', W: N, H: N, elev,
+    mx0: (m.tx + 0.5 / N) / n, my0: (m.ty + 0.5 / N) / n, mStep: 1 / (N * n),
+    credit: '標高データ：© Mapbox（富士山周辺 約32km四方のサンプル。販売用のデータには国土地理院の標高タイルを使います）'};
+}
+function elevAt(src, X, Y){
+  let gx = (X - src.mx0) / src.mStep, gy = (Y - src.my0) / src.mStep;
+  gx = clamp(gx, 0, src.W - 1.001); gy = clamp(gy, 0, src.H - 1.001);
+  const x0 = gx | 0, y0 = gy | 0, fx = gx - x0, fy = gy - y0, W = src.W, e = src.elev, i = y0 * W + x0;
+  return (e[i] * (1 - fx) + e[i + 1] * fx) * (1 - fy) + (e[i + W] * (1 - fx) + e[i + W + 1] * fx) * fy;
+}
+function srcBounds(src){
+  return {x0: src.mx0, y0: src.my0, x1: src.mx0 + (src.W - 1) * src.mStep, y1: src.my0 + (src.H - 1) * src.mStep};
+}
+
+/* ================= state ================= */
+const S = {
+  src: null, center: [0, 0], sizeM: 20000,
+  mode: 'relief',
+  relief: {widthMm: 150, exag: 1.5, baseMm: 4, res: 'std'},
+  lamp: {widthMm: 100, style: 'shade', contrast: 1, tmin: 0.8, tmax: 3, frameMm: 5, res: 'std'},
+  route: null, routeName: '', routeDemo: false,
+  text: '富士山 3776m', textMm: 8,
+  lit: true,
+  live: false, city: null, cityKey: '', cityBusy: false
+};
+const centerLat = () => mercToLonLat(S.center[0], S.center[1])[1];
+const halfMerc = () => S.sizeM / 2 / mpm(centerLat());
+function maxSizeM(){
+  if (!S.src || S.src.kind !== 'sample') return 30000;
+  const b = srcBounds(S.src);
+  return Math.floor(Math.min(b.x1 - b.x0, b.y1 - b.y0) * mpm(centerLat()) * 0.98 / 500) * 500;
+}
+function clampCenter(){
+  if (!S.src || S.src.kind !== 'sample') return;
+  const b = srcBounds(S.src), h = halfMerc();
+  S.center[0] = clamp(S.center[0], b.x0 + h, b.x1 - h);
+  S.center[1] = clamp(S.center[1], b.y0 + h, b.y1 - h);
+}
+function sampleGrid(n){
+  const h = halfMerc(), X0 = S.center[0] - h, Y0 = S.center[1] - h, st = 2 * h / (n - 1);
+  const out = new Float32Array(n * n);
+  for (let j = 0; j < n; j++){
+    const Y = Y0 + j * st;
+    for (let i = 0; i < n; i++) out[j * n + i] = elevAt(S.src, X0 + i * st, Y);
+  }
+  return out;
+}
+function toGrid(X, Y, n){
+  const h = halfMerc();
+  return [(X - S.center[0] + h) / (2 * h) * (n - 1), (Y - S.center[1] + h) / (2 * h) * (n - 1)];
+}
+
+/* ================= raster helpers ================= */
+function minmax(a){ let lo = Infinity, hi = -Infinity; for (let i = 0; i < a.length; i++){ const v = a[i]; if (v < lo) lo = v; if (v > hi) hi = v; } return [lo, hi]; }
+function hillshade(H, nx, ny, cellM, zf){
+  const out = new Float32Array(nx * ny);
+  const az = 315 * Math.PI / 180, alt = 45 * Math.PI / 180;
+  const Lx = Math.cos(alt) * Math.sin(az), Ly = Math.cos(alt) * Math.cos(az), Lz = Math.sin(alt);
+  for (let j = 0; j < ny; j++){
+    const jU = j > 0 ? j - 1 : 0, jD = j < ny - 1 ? j + 1 : ny - 1;
+    for (let i = 0; i < nx; i++){
+      const iL = i > 0 ? i - 1 : 0, iR = i < nx - 1 ? i + 1 : nx - 1;
+      const dzdx = (H[j * nx + iR] - H[j * nx + iL]) / ((iR - iL) * cellM) * zf;
+      const dzdy = (H[jU * nx + i] - H[jD * nx + i]) / ((jD - jU) * cellM) * zf;
+      const len = Math.sqrt(dzdx * dzdx + dzdy * dzdy + 1);
+      const v = (-dzdx * Lx - dzdy * Ly + Lz) / len;
+      out[j * nx + i] = v > 0 ? v : 0;
+    }
+  }
+  return out;
+}
+function stretch(a, lo, hi){
+  const s = Float32Array.from(a).sort();
+  const vlo = s[Math.floor(lo * (s.length - 1))], vhi = s[Math.floor(hi * (s.length - 1))];
+  const r = Math.max(1e-6, vhi - vlo);
+  for (let i = 0; i < a.length; i++) a[i] = clamp((a[i] - vlo) / r, 0, 1);
+}
+function niceInterval(raw){
+  const c = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+  for (const v of c) if (v >= raw) return v;
+  return 2000;
+}
+function paintDisc(out, n, x, y, r, val){
+  const R = Math.ceil(r), r2 = r * r + 0.25;
+  for (let dy = -R; dy <= R; dy++){
+    const yy = y + dy; if (yy < 0 || yy >= n) continue;
+    for (let dx = -R; dx <= R; dx++){
+      const xx = x + dx; if (xx < 0 || xx >= n) continue;
+      if (dx * dx + dy * dy <= r2 && out[yy * n + xx] < val) out[yy * n + xx] = val;
+    }
+  }
+}
+function contourLines(H, n, iv, cellMm){
+  const out = new Uint8Array(n * n);
+  const r1 = Math.max(0.5, 0.65 / 2 / cellMm), r2 = Math.max(0.8, 1.1 / 2 / cellMm);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){
+    const k = j * n + i, a = Math.floor(H[k] / iv);
+    let lv = null;
+    if (i < n - 1){ const b = Math.floor(H[k + 1] / iv); if (b !== a) lv = Math.max(a, b); }
+    if (j < n - 1){ const b = Math.floor(H[k + n] / iv); if (b !== a) lv = Math.max(lv === null ? -1e9 : lv, Math.max(a, b)); }
+    if (lv !== null){ const idx = lv % 5 === 0; paintDisc(out, n, i, j, idx ? r2 : r1, idx ? 2 : 1); }
+  }
+  return out;
+}
+function routeMask(n, cellMm, widthMm){
+  if (!S.route || S.route.length < 2) return null;
+  const mask = new Uint8Array(n * n), r = Math.max(0.6, widthMm / 2 / cellMm), r2 = r * r;
+  let prev = toGrid(S.route[0][0], S.route[0][1], n);
+  for (let k = 1; k < S.route.length; k++){
+    const cur = toGrid(S.route[k][0], S.route[k][1], n);
+    const ax = prev[0], ay = prev[1], bx = cur[0], by = cur[1];
+    const minx = Math.max(0, Math.floor(Math.min(ax, bx) - r)), maxx = Math.min(n - 1, Math.ceil(Math.max(ax, bx) + r));
+    const miny = Math.max(0, Math.floor(Math.min(ay, by) - r)), maxy = Math.min(n - 1, Math.ceil(Math.max(ay, by) + r));
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    for (let y = miny; y <= maxy; y++) for (let x = minx; x <= maxx; x++){
+      const t = L2 > 0 ? clamp(((x - ax) * dx + (y - ay) * dy) / L2, 0, 1) : 0;
+      const ex = ax + t * dx - x, ey = ay + t * dy - y;
+      if (ex * ex + ey * ey <= r2) mask[y * n + x] = 1;
+    }
+    prev = cur;
+  }
+  return mask;
+}
+function textMask(text, cols, rows, cellMm, sizeMm, centerRow){
+  const cv = document.createElement('canvas'); cv.width = cols; cv.height = rows;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#000'; c.fillRect(0, 0, cols, rows);
+  let px = sizeMm / cellMm;
+  c.font = `700 ${px}px ${TEXT_FONT}`;
+  const w = c.measureText(text).width;
+  if (w > cols * 0.84){ px *= cols * 0.84 / w; c.font = `700 ${px}px ${TEXT_FONT}`; }
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(text, cols / 2, centerRow === undefined ? rows / 2 : centerRow);
+  const d = c.getImageData(0, 0, cols, rows).data, m = new Uint8Array(cols * rows);
+  for (let i = 0; i < m.length; i++) m[i] = d[i * 4] > 120 ? 1 : 0;
+  return m;
+}
+
+/* ================= city layer (live only) ================= */
+function rasterCity(n, cellMm){
+  if (!S.city) return null;
+  const cv = document.createElement('canvas'); cv.width = n; cv.height = n;
+  const c = cv.getContext('2d');
+  c.fillStyle = '#000'; c.fillRect(0, 0, n, n);
+  const h = halfMerc(), X0 = S.center[0] - h, Y0 = S.center[1] - h, k = (n - 1) / (2 * h);
+  const P = p => [(p[0] - X0) * k, (p[1] - Y0) * k];
+  const mm = v => Math.max(1, v / cellMm);
+  const poly = (pts, fill) => { c.beginPath(); pts.forEach((p, i) => { const q = P(p); i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]); }); c.closePath(); c.fillStyle = fill; c.fill(); };
+  const line = (pts, w, col) => { c.beginPath(); pts.forEach((p, i) => { const q = P(p); i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1]); }); c.lineWidth = w; c.strokeStyle = col; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke(); };
+  const W = S.city.ways;
+  for (const w of W) if (w.tags.natural === 'water') poly(w.pts, 'rgb(4,4,4)');
+  for (const w of W) if (w.tags.waterway) line(w.pts, mm(1.2), 'rgb(4,4,4)');
+  for (const w of W) if (w.tags.building) poly(w.pts, 'rgb(118,118,118)');
+  const roadW = {motorway: 1.7, trunk: 1.6, primary: 1.35, secondary: 1.2, tertiary: 1.0, residential: 0.75, unclassified: 0.75, living_street: 0.6, service: 0.5, pedestrian: 0.6, footway: 0.4, path: 0.4, cycleway: 0.4, track: 0.45, steps: 0.35};
+  for (const w of W) if (w.tags.highway && roadW[w.tags.highway.replace('_link', '')]) line(w.pts, mm(roadW[w.tags.highway.replace('_link', '')]), 'rgb(255,255,255)');
+  for (const w of W) if (w.tags.railway === 'rail'){ c.setLineDash([mm(1.2), mm(0.8)]); line(w.pts, mm(0.6), 'rgb(220,220,220)'); c.setLineDash([]); }
+  const d = c.getImageData(0, 0, n, n).data, out = new Float32Array(n * n);
+  for (let i = 0; i < out.length; i++) out[i] = d[i * 4] / 255;
+  return out;
+}
+
+/* ================= models ================= */
+function brightness(H, n, cellM, cellMm){
+  const P = S.lamp;
+  const [hmin, hmax] = minmax(H);
+  const ratio = Math.max(1e-4, (hmax - hmin) / S.sizeM);
+  const zf = clamp(0.10 / ratio, 1, 12);
+  const sh = hillshade(H, n, n, cellM, zf); stretch(sh, 0.01, 0.995);
+  const B = new Float32Array(n * n);
+  if (P.style === 'contour'){
+    const iv = niceInterval((hmax - hmin) / 12);
+    const L = contourLines(H, n, iv, cellMm);
+    for (let k = 0; k < B.length; k++) B[k] = 0.05 + 0.22 * sh[k] + (L[k] === 2 ? 0.75 : L[k] === 1 ? 0.55 : 0);
+  } else if (P.style === 'city' && S.city){
+    const city = rasterCity(n, cellMm);
+    for (let k = 0; k < B.length; k++){
+      const v = city[k], base = 0.06 + 0.16 * sh[k];
+      if (v > 0 && v < 0.03) B[k] = 0.02;            // water
+      else B[k] = Math.max(base, v);                 // land, buildings, roads, rail
+    }
+  } else {
+    for (let k = 0; k < B.length; k++) B[k] = 0.04 + 0.96 * Math.pow(sh[k], 1.15);
+  }
+  const c = P.contrast;
+  for (let k = 0; k < B.length; k++) B[k] = clamp((B[k] - 0.5) * c + 0.5, 0, 1);
+  return B;
+}
+function buildRelief(forExport){
+  const P = S.relief;
+  const n = forExport ? (P.res === 'high' ? 480 : 340) : 240;
+  const cell = P.widthMm / (n - 1);
+  const H = sampleGrid(n);
+  const [hmin, hmax] = minmax(H);
+  const s = P.widthMm / S.sizeM;
+  const rm = routeMask(n, cell, 1.4);
+  const text = S.text.trim();
+  const plateRows = text ? Math.max(4, Math.round((S.textMm + 7) / cell)) : 0;
+  const nx = n, ny = n + plateRows, Z = new Float32Array(nx * ny);
+  for (let k = 0; k < n * n; k++) Z[k] = P.baseMm + (H[k] - hmin) * s * P.exag + (rm && rm[k] ? 0.9 : 0);
+  if (plateRows){
+    const tm = textMask(text, nx, plateRows, cell, S.textMm);
+    for (let j = 0; j < plateRows; j++) for (let i = 0; i < nx; i++) Z[(n + j) * nx + i] = P.baseMm + (tm[j * nx + i] ? 1.0 : 0);
+  }
+  const [, zmax] = minmax(Z);
+  let route = null;
+  if (rm){ route = new Uint8Array(nx * ny); route.set(rm); }
+  return {kind: 'relief', Z, nx, ny, cell, hmin, hmax, zmax, route};
+}
+function buildLamp(forExport){
+  const P = S.lamp;
+  const cell = forExport ? (P.res === 'high' ? Math.max(0.2, P.widthMm / 620) : Math.max(0.28, P.widthMm / 430)) : Math.max(0.45, P.widthMm / 300);
+  const ni = Math.round(P.widthMm / cell) + 1;
+  const text = S.text.trim();
+  const F = P.frameMm, FB = text ? S.textMm + 10 : F;
+  const fF = Math.round(F / cell), fB = Math.round(FB / cell);
+  const nx = ni + 2 * fF, ny = ni + fF + fB;
+  const H = sampleGrid(ni);
+  const [hmin, hmax] = minmax(H);
+  const B = brightness(H, ni, S.sizeM / (ni - 1), cell);
+  const rm = routeMask(ni, cell, 1.0);
+  if (rm) for (let k = 0; k < B.length; k++) if (rm[k]) B[k] = 1;
+  const tF = P.tmax + 0.8, span = P.tmax - P.tmin;
+  const Z = new Float32Array(nx * ny).fill(tF);
+  for (let j = 0; j < ni; j++) for (let i = 0; i < ni; i++) Z[(j + fF) * nx + i + fF] = P.tmax - B[j * ni + i] * span;
+  if (text){
+    const lip = 4.5;
+    const tm = textMask(text, nx, fB, cell, S.textMm, ((FB - lip) / 2) / cell);
+    for (let j = 0; j < fB; j++) for (let i = 0; i < nx; i++) if (tm[j * nx + i]) Z[(ny - fB + j) * nx + i] = P.tmin + 0.1;
+  }
+  return {kind: 'lamp', Z, nx, ny, cell, tF, hmin, hmax, widthMm: (nx - 1) * cell, heightMm: (ny - 1) * cell};
+}
+
+/* ================= meshes ================= */
+function heightmapSolid(Z, nx, ny, cell){
+  const per = [];
+  for (let j = 0; j < ny - 1; j++) per.push(j * nx);
+  for (let i = 0; i < nx - 1; i++) per.push((ny - 1) * nx + i);
+  for (let j = ny - 1; j > 0; j--) per.push(j * nx + nx - 1);
+  for (let i = nx - 1; i > 0; i--) per.push(i);
+  const P = per.length, nTop = nx * ny, Hmm = (ny - 1) * cell;
+  const pos = new Float32Array((nTop + 2 * P + 1) * 3);
+  let o = 0;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){ pos[o++] = i * cell; pos[o++] = Hmm - j * cell; pos[o++] = Z[j * nx + i]; }
+  for (let p = 0; p < P; p++){ const v = per[p]; pos[o++] = (v % nx) * cell; pos[o++] = Hmm - Math.floor(v / nx) * cell; pos[o++] = Z[v]; }
+  for (let p = 0; p < P; p++){ const v = per[p]; pos[o++] = (v % nx) * cell; pos[o++] = Hmm - Math.floor(v / nx) * cell; pos[o++] = 0; }
+  pos[o++] = (nx - 1) * cell / 2; pos[o++] = Hmm / 2; pos[o++] = 0;
+  const idx = new Uint32Array((2 * (nx - 1) * (ny - 1) + 3 * P) * 3);
+  let t = 0;
+  for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++){
+    const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+    idx[t++] = a; idx[t++] = c; idx[t++] = b;
+    idx[t++] = b; idx[t++] = c; idx[t++] = d;
+  }
+  const wT = nTop, wB = nTop + P, ctr = nTop + 2 * P;
+  for (let p = 0; p < P; p++){
+    const q = (p + 1) % P;
+    idx[t++] = wT + p; idx[t++] = wB + p; idx[t++] = wB + q;
+    idx[t++] = wT + p; idx[t++] = wB + q; idx[t++] = wT + q;
+  }
+  for (let p = 0; p < P; p++){ const q = (p + 1) % P; idx[t++] = ctr; idx[t++] = wB + q; idx[t++] = wB + p; }
+  return {pos, idx, nTop};
+}
+function unionBoxes(boxes){
+  const q = v => Math.round(v * 1e4) / 1e4;
+  const axis = a => Array.from(new Set(boxes.flatMap(b => [q(b[a]), q(b[a + 3])]))).sort((x, y) => x - y);
+  const xs = axis(0), ys = axis(1), zs = axis(2), nx = xs.length - 1, ny = ys.length - 1, nz = zs.length - 1;
+  const ix = new Map(xs.map((v, i) => [v, i])), iy = new Map(ys.map((v, i) => [v, i])), iz = new Map(zs.map((v, i) => [v, i]));
+  const filled = new Uint8Array(nx * ny * nz), id = (i, j, k) => (k * ny + j) * nx + i;
+  for (const b of boxes){
+    const i0 = ix.get(q(b[0])), i1 = ix.get(q(b[3])), j0 = iy.get(q(b[1])), j1 = iy.get(q(b[4])), k0 = iz.get(q(b[2])), k1 = iz.get(q(b[5]));
+    for (let k = k0; k < k1; k++) for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) filled[id(i, j, k)] = 1;
+  }
+  const at = (i, j, k) => i >= 0 && j >= 0 && k >= 0 && i < nx && j < ny && k < nz && filled[id(i, j, k)] === 1;
+  const vmap = new Map(), P = [], I = [];
+  const v = (i, j, k) => { const key = (k * (ny + 1) + j) * (nx + 1) + i; let r = vmap.get(key); if (r === undefined){ r = P.length / 3; P.push(xs[i], ys[j], zs[k]); vmap.set(key, r); } return r; };
+  const quad = (a, b, c, d) => I.push(a, b, c, a, c, d);
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++){
+    if (!at(i, j, k)) continue;
+    if (!at(i - 1, j, k)) quad(v(i, j, k), v(i, j, k + 1), v(i, j + 1, k + 1), v(i, j + 1, k));
+    if (!at(i + 1, j, k)) quad(v(i + 1, j, k), v(i + 1, j + 1, k), v(i + 1, j + 1, k + 1), v(i + 1, j, k + 1));
+    if (!at(i, j - 1, k)) quad(v(i, j, k), v(i + 1, j, k), v(i + 1, j, k + 1), v(i, j, k + 1));
+    if (!at(i, j + 1, k)) quad(v(i, j + 1, k), v(i, j + 1, k + 1), v(i + 1, j + 1, k + 1), v(i + 1, j + 1, k));
+    if (!at(i, j, k - 1)) quad(v(i, j, k), v(i, j + 1, k), v(i + 1, j + 1, k), v(i + 1, j, k));
+    if (!at(i, j, k + 1)) quad(v(i, j, k + 1), v(i + 1, j, k + 1), v(i + 1, j + 1, k + 1), v(i, j + 1, k + 1));
+  }
+  return {pos: new Float32Array(P), idx: new Uint32Array(I)};
+}
+function boxMesh(){
+  const P = [], I = [], L = [];
+  const FACES = [[0,2,1],[0,3,2],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[3,7,6],[3,6,2],[0,4,7],[0,7,3],[1,2,6],[1,6,5]];
+  return {
+    box(x0, y0, z0, x1, y1, z1){
+      const b = P.length / 3;
+      P.push(x0,y0,z0, x1,y0,z0, x1,y1,z0, x0,y1,z0, x0,y0,z1, x1,y0,z1, x1,y1,z1, x0,y1,z1);
+      for (const f of FACES) I.push(b + f[0], b + f[1], b + f[2]);
+      L.push([x0, y0, z0, x1, y1, z1]);
+    },
+    done(){ return unionBoxes(L); }
+  };
+}
+function lampBoxDims(pw, ph, tF){
+  const wall = 2.4, cl = 0.5, gap = tF + 0.6, stop = 1.6, depth = 28, lip = 4.5;
+  const Wb = pw + 2 * cl + 2 * wall, Db = wall + gap + stop + depth + wall, Hb = wall + ph;
+  return {wall, cl, gap, stop, depth, lip, Wb, Db, Hb};
+}
+function lampBox(pw, ph, tF){
+  const d = lampBoxDims(pw, ph, tF), m = boxMesh(), e = 0.05;
+  const {wall, gap, stop, lip, Wb, Db, Hb} = d;
+  m.box(0, 0, 0, Wb, Db, wall);                                   // floor
+  m.box(0, 0, 0, wall, Db, Hb);                                   // left wall
+  m.box(Wb - wall, 0, 0, Wb, Db, Hb);                             // right wall
+  m.box(0, Db - wall, 0, Wb / 2 - 6, Db, Hb);                     // back wall, left of cable notch
+  m.box(Wb / 2 + 6, Db - wall, 0, Wb, Db, Hb);                    // back wall, right of notch
+  m.box(Wb / 2 - 6 - e, Db - wall, wall + 7, Wb / 2 + 6 + e, Db, Hb); // back wall above notch
+  m.box(wall - e, 0, 0, wall + lip, wall, Hb);                    // front lip left
+  m.box(Wb - wall - lip, 0, 0, Wb - wall + e, wall, Hb);          // front lip right
+  m.box(0, 0, 0, Wb, wall, wall + 4);                             // front lip bottom
+  const ys = wall + gap;
+  m.box(wall - e, ys, 0, wall + lip, ys + stop, Hb);              // inner stop left
+  m.box(Wb - wall - lip, ys, 0, Wb - wall + e, ys + stop, Hb);    // inner stop right
+  m.box(wall - e, ys, 0, Wb - wall + e, ys + stop, wall + 4);     // inner stop bottom
+  return Object.assign(m.done(), {dims: d});
+}
+function lampLid(pw, ph, tF){
+  const d = lampBoxDims(pw, ph, tF), m = boxMesh();
+  const depth = d.Db - (d.wall + d.gap + d.stop);
+  m.box(0, 0, 0, d.Wb, depth, 2);
+  m.box(d.wall + 0.4, 2, 2 - 0.05, d.wall + 2.4, depth - d.wall - 2, 5);
+  m.box(d.Wb - d.wall - 2.4, 2, 2 - 0.05, d.Wb - d.wall - 0.4, depth - d.wall - 2, 5);
+  return Object.assign(m.done(), {w: d.Wb, depth});
+}
+
+/* ================= files ================= */
+function stlBinary(pos, idx, title){
+  const n = idx.length / 3, buf = new ArrayBuffer(84 + n * 50), dv = new DataView(buf), u8 = new Uint8Array(buf);
+  const head = ('rittai-chizu-kobo ' + title).slice(0, 79);
+  for (let i = 0; i < head.length; i++) u8[i] = head.charCodeAt(i) & 0x7f;
+  dv.setUint32(80, n, true);
+  let o = 84;
+  for (let t = 0; t < n; t++){
+    const a = idx[3 * t] * 3, b = idx[3 * t + 1] * 3, c = idx[3 * t + 2] * 3;
+    const ux = pos[b] - pos[a], uy = pos[b + 1] - pos[a + 1], uz = pos[b + 2] - pos[a + 2];
+    const vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    dv.setFloat32(o, nx, true); dv.setFloat32(o + 4, ny, true); dv.setFloat32(o + 8, nz, true);
+    dv.setFloat32(o + 12, pos[a], true); dv.setFloat32(o + 16, pos[a + 1], true); dv.setFloat32(o + 20, pos[a + 2], true);
+    dv.setFloat32(o + 24, pos[b], true); dv.setFloat32(o + 28, pos[b + 1], true); dv.setFloat32(o + 32, pos[b + 2], true);
+    dv.setFloat32(o + 36, pos[c], true); dv.setFloat32(o + 40, pos[c + 1], true); dv.setFloat32(o + 44, pos[c + 2], true);
+    o += 50;
+  }
+  return u8;
+}
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(u8){ let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+async function deflateRaw(u8){
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    const stream = new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch (e){ return null; }
+}
+async function makeZip(files){
+  const enc = new TextEncoder(), parts = [], central = [];
+  const now = new Date();
+  const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+  const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+  let offset = 0;
+  for (const f of files){
+    const name = enc.encode(f.name), data = f.data, crc = crc32(data);
+    const comp = await deflateRaw(data);
+    const useDeflate = comp && comp.length < data.length;
+    const body = useDeflate ? comp : data, method = useDeflate ? 8 : 0;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, method, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, body.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, body);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(10, method, true); ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, body.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, name.length, true);
+    ch.setUint16(30, 0, true); ch.setUint16(32, 0, true); ch.setUint16(34, 0, true); ch.setUint16(36, 0, true); ch.setUint32(38, 0, true);
+    ch.setUint32(42, offset, true);
+    central.push(new Uint8Array(ch.buffer), name);
+    offset += 30 + name.length + body.length;
+  }
+  const cdSize = central.reduce((s, p) => s + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], {type: 'application/zip'});
+}
+
+/* ================= 3D viewer ================= */
+const V = {ok: false};
+function initViewer(){
+  if (!window.THREE || !THREE.OrbitControls){ $('#glFallback').hidden = false; return; }
+  try {
+    const canvas = $('#gl');
+    V.renderer = new THREE.WebGLRenderer({canvas, antialias: true, alpha: true});
+    V.renderer.setClearColor(0x000000, 0);
+    V.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    V.renderer.outputEncoding = THREE.sRGBEncoding;
+    V.scene = new THREE.Scene();
+    V.camera = new THREE.PerspectiveCamera(32, 1, 1, 8000);
+    V.controls = new THREE.OrbitControls(V.camera, canvas);
+    V.controls.enableDamping = false;
+    V.controls.addEventListener('change', render);
+    V.hemi = new THREE.HemisphereLight(0xf4f1ea, 0x1f272c, 0.42);
+    V.sun = new THREE.DirectionalLight(0xfff6e8, 0.85);
+    V.sun.position.set(-1, 0.62, 0.42);
+    V.sunRelief = V.sun.position.clone();
+    V.fill = new THREE.DirectionalLight(0xb9cbd6, 0.16);
+    V.fill.position.set(1, 0.5, 0.6);
+    V.scene.add(V.fill);
+    V.warm = new THREE.PointLight(0xffa850, 0, 400, 1.6);
+    V.scene.add(V.hemi, V.sun, V.warm);
+    V.group = new THREE.Group(); V.scene.add(V.group);
+    V.matWhite = new THREE.MeshStandardMaterial({color: 0xCFC9BF, roughness: 0.9, metalness: 0});
+    V.matRelief = new THREE.MeshStandardMaterial({vertexColors: true, roughness: 0.9, metalness: 0});
+    V.matBox = new THREE.MeshStandardMaterial({color: 0x2B3236, roughness: 0.7, metalness: 0});
+    V.matGlow = new THREE.MeshBasicMaterial({vertexColors: true});
+    V.ok = true;
+    new ResizeObserver(resize).observe($('#stage'));
+    resize();
+  } catch (e){ $('#glFallback').hidden = false; V.ok = false; }
+}
+function resize(){
+  if (!V.ok) return;
+  const st = $('#stage'), w = st.clientWidth, h = st.clientHeight;
+  if (!w || !h) return;
+  V.renderer.setSize(w, h, false);
+  V.camera.aspect = w / h; V.camera.updateProjectionMatrix();
+  render();
+}
+function render(){ if (V.ok) V.renderer.render(V.scene, V.camera); }
+function clearGroup(){
+  for (const ch of V.group.children.slice()){ V.group.remove(ch); if (ch.geometry) ch.geometry.dispose(); }
+}
+function geom(pos, idx, colors){
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  if (colors) g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  return g;
+}
+let camKey = '';
+function fitCamera(force, dir){
+  const box = new THREE.Box3().setFromObject(V.group);
+  const c = box.getCenter(new THREE.Vector3()), sz = box.getSize(new THREE.Vector3());
+  const R = Math.max(sz.x, sz.y, sz.z) * 0.62;
+  const dist = R / Math.sin(V.camera.fov * Math.PI / 360) * 1.08;
+  V.controls.target.copy(c);
+  if (force){
+    const d = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
+    V.camera.position.copy(c).addScaledVector(d, dist);
+  }
+  V.camera.near = dist / 50; V.camera.far = dist * 10; V.camera.updateProjectionMatrix();
+  V.controls.update();
+}
+function showRelief(r){
+  if (!V.ok) return;
+  clearGroup();
+  const m = heightmapSolid(r.Z, r.nx, r.ny, r.cell);
+  const vCount = m.pos.length / 3, col = new Float32Array(vCount * 3);
+  for (let k = 0; k < vCount; k++){ col[k * 3] = 0.81; col[k * 3 + 1] = 0.79; col[k * 3 + 2] = 0.75; }
+  if (r.route) for (let k = 0; k < r.route.length; k++) if (r.route[k]){ col[k * 3] = 0.93; col[k * 3 + 1] = 0.42; col[k * 3 + 2] = 0.12; }
+  const mesh = new THREE.Mesh(geom(m.pos, m.idx, col), V.matRelief);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(-(r.nx - 1) * r.cell / 2, 0, (r.ny - 1) * r.cell / 2);
+  V.group.add(mesh);
+  V.sun.position.copy(V.sunRelief);
+  $('#stage').classList.remove('night');
+  V.hemi.intensity = 0.42; V.sun.intensity = 0.85; V.fill.intensity = 0.16; V.warm.intensity = 0;
+  const key = 'relief';
+  fitCamera(camKey !== key, [0.5, 0.62, 1]); camKey = key;
+  render();
+}
+function litColors(r, nTop, vCount){
+  const col = new Float32Array(vCount * 3).fill(0.025);
+  const mu = 1.55, P = S.lamp;
+  for (let k = 0; k < nTop; k++){
+    const I = Math.exp(-mu * Math.max(0, r.Z[k] - P.tmin));
+    col[k * 3] = Math.min(1, 1.12 * Math.pow(I, 1.25)) + 0.01;
+    col[k * 3 + 1] = 0.86 * Math.pow(I, 1.55) + 0.006;
+    col[k * 3 + 2] = 0.6 * Math.pow(I, 2.1) + 0.003;
+  }
+  return col;
+}
+function showLamp(r){
+  if (!V.ok) return;
+  clearGroup();
+  const m = heightmapSolid(r.Z, r.nx, r.ny, r.cell);
+  const vCount = m.pos.length / 3;
+  const panel = new THREE.Mesh(geom(m.pos, m.idx, S.lit ? litColors(r, m.nTop, vCount) : null), S.lit ? V.matGlow : V.matWhite);
+  const bx = lampBox(r.widthMm, r.heightMm, r.tF), d = bx.dims;
+  const boxMeshObj = new THREE.Mesh(geom(bx.pos, bx.idx), V.matBox);
+  boxMeshObj.rotation.x = -Math.PI / 2;
+  panel.position.set(d.wall + d.cl, d.wall, -(d.wall + d.gap) + 0.3);
+  const g = new THREE.Group(); g.add(boxMeshObj, panel);
+  g.position.set(-d.Wb / 2, -d.Hb / 2, d.Db / 2);
+  V.group.add(g);
+  V.warm.position.set(0, 0, -d.Db / 2 + d.depth / 2 - 4);
+  if (S.lit){
+    V.hemi.intensity = 0.06; V.sun.intensity = 0.03; V.fill.intensity = 0; V.warm.intensity = 1.4; V.warm.distance = d.Wb * 2.2;
+    $('#stage').classList.add('night');
+  } else {
+    V.hemi.intensity = 0.5; V.sun.intensity = 0.8; V.fill.intensity = 0.16; V.warm.intensity = 0;
+    V.sun.position.set(-0.6, 0.8, 1);
+    $('#stage').classList.remove('night');
+  }
+  const key = 'lamp';
+  fitCamera(camKey !== key, [0.42, 0.28, 1]); camKey = key;
+  render();
+}
+
+/* ================= area picker ================= */
+const AP = {img: null, drag: null};
+function buildPickerImage(){
+  const src = S.src, W = src.W, H = src.H;
+  const cellM = src.mStep * mpm(mercToLonLat(src.mx0, src.my0 + src.mStep * H / 2)[1]);
+  const [lo, hi] = minmax(src.elev);
+  const sh = hillshade(src.elev, W, H, cellM, clamp(0.12 / Math.max(1e-4, (hi - lo) / (W * cellM)), 1, 8));
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d'), id = c.createImageData(W, H), d = id.data;
+  const stops = [[0, [92, 120, 104]], [0.25, [140, 152, 112]], [0.5, [176, 158, 120]], [0.75, [196, 180, 160]], [1, [244, 241, 236]]];
+  for (let k = 0; k < W * H; k++){
+    const e = src.elev[k];
+    let rgb;
+    if (e <= 0.5){ rgb = [88, 118, 140]; }
+    else {
+      const t = clamp((e - lo) / Math.max(1, hi - lo), 0, 1);
+      let s = 0; while (s < stops.length - 2 && t > stops[s + 1][0]) s++;
+      const a = stops[s], b = stops[s + 1], f = (t - a[0]) / (b[0] - a[0]);
+      rgb = [0, 1, 2].map(q => a[1][q] + (b[1][q] - a[1][q]) * f);
+    }
+    const l = 0.35 + 0.75 * sh[k];
+    d[k * 4] = clamp(rgb[0] * l, 0, 255); d[k * 4 + 1] = clamp(rgb[1] * l, 0, 255); d[k * 4 + 2] = clamp(rgb[2] * l, 0, 255); d[k * 4 + 3] = 255;
+  }
+  c.putImageData(id, 0, 0);
+  AP.img = cv;
+}
+function pickerGeom(){
+  const cv = $('#pick'), r = cv.getBoundingClientRect();
+  const b = srcBounds(S.src), spanX = b.x1 - b.x0, spanY = b.y1 - b.y0, span = Math.max(spanX, spanY);
+  const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
+  return {w: r.width, h: r.height, x0: cx - span / 2, y0: cy - span / 2, span};
+}
+function drawPicker(){
+  const cv = $('#pick'); if (!AP.img) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1), g = pickerGeom();
+  if (!g.w) return;
+  cv.width = Math.round(g.w * dpr); cv.height = Math.round(g.h * dpr);
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sx = X => (X - g.x0) / g.span * g.w, sy = Y => (Y - g.y0) / g.span * g.h;
+  const b = srcBounds(S.src);
+  c.fillStyle = (getComputedStyle(document.documentElement).getPropertyValue('--bg') || '').trim() || '#ddd';
+  c.fillRect(0, 0, g.w, g.h);
+  c.imageSmoothingEnabled = true;
+  c.drawImage(AP.img, sx(b.x0), sy(b.y0), sx(b.x1) - sx(b.x0), sy(b.y1) - sy(b.y0));
+  const h = halfMerc(), x = sx(S.center[0] - h), y = sy(S.center[1] - h), s = sx(S.center[0] + h) - x;
+  c.fillStyle = 'rgba(12,16,18,0.45)';
+  c.fillRect(0, 0, g.w, y); c.fillRect(0, y + s, g.w, g.h - y - s); c.fillRect(0, y, x, s); c.fillRect(x + s, y, g.w - x - s, s);
+  if (S.route){
+    c.beginPath(); S.route.forEach((p, i) => { const px = sx(p[0]), py = sy(p[1]); i ? c.lineTo(px, py) : c.moveTo(px, py); });
+    c.lineWidth = 2; c.strokeStyle = '#FFB347'; c.stroke();
+  }
+  c.lineWidth = 2; c.strokeStyle = '#FFFFFF'; c.strokeRect(x, y, s, s);
+  c.lineWidth = 1; c.strokeStyle = 'rgba(255,255,255,.7)';
+  c.beginPath(); c.moveTo(x + s / 2 - 8, y + s / 2); c.lineTo(x + s / 2 + 8, y + s / 2); c.moveTo(x + s / 2, y + s / 2 - 8); c.lineTo(x + s / 2, y + s / 2 + 8); c.stroke();
+}
+function bindPicker(){
+  const cv = $('#pick');
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    AP.drag = {x: e.clientX, y: e.clientY, c: S.center.slice(), moved: false};
+    cv.style.cursor = 'grabbing';
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!AP.drag) return;
+    const g = pickerGeom(), dx = e.clientX - AP.drag.x, dy = e.clientY - AP.drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) AP.drag.moved = true;
+    if (!AP.drag.moved) return;
+    S.center = [AP.drag.c[0] + dx / g.w * g.span, AP.drag.c[1] + dy / g.h * g.span];
+    onAreaChanged();
+  });
+  const end = e => {
+    if (!AP.drag) return;
+    if (!AP.drag.moved){
+      const r = cv.getBoundingClientRect(), g = pickerGeom();
+      S.center = [g.x0 + (e.clientX - r.left) / g.w * g.span, g.y0 + (e.clientY - r.top) / g.h * g.span];
+      onAreaChanged();
+    }
+    AP.drag = null; cv.style.cursor = 'grab';
+    maybeReloadLive();
+  };
+  cv.addEventListener('pointerup', end);
+  cv.addEventListener('pointercancel', () => { AP.drag = null; });
+  new ResizeObserver(drawPicker).observe(cv);
+}
+
+/* ================= live (only outside the artifact viewer) ================= */
+async function probeLive(){
+  if (window.claude) return false;
+  try {
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+    const r = await fetch(gsiDem(14, 14505, 6469), {signal: ctl.signal});
+    clearTimeout(t);
+    return r.ok;
+  } catch (e){ return false; }
+}
+async function fetchDemTile(z, x, y){
+  try {
+    const r = await fetch(gsiDem(z, x, y));
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    const bmp = await createImageBitmap(blob, {premultiplyAlpha: 'none', colorSpaceConversion: 'none'});
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 256;
+    const c = cv.getContext('2d', {willReadFrequently: true}); c.drawImage(bmp, 0, 0);
+    const d = c.getImageData(0, 0, 256, 256).data, out = new Float32Array(65536);
+    for (let i = 0; i < 65536; i++){
+      const v = d[i * 4] * 65536 + d[i * 4 + 1] * 256 + d[i * 4 + 2];
+      out[i] = v === 8388608 ? 0 : (v < 8388608 ? v * 0.01 : (v - 16777216) * 0.01);
+    }
+    return out;
+  } catch (e){ return null; }
+}
+let liveBusy = false;
+async function loadLiveContext(lon, lat, label){
+  liveBusy = true;
+  setStatus('#liveStatus', `「${label}」の標高データを読み込んでいます…`);
+  const [cx, cy] = lonLatToMerc(lon, lat);
+  const spanM = Math.max(3000, S.sizeM * 2.2), h = spanM / 2 / mpm(lat);
+  const z = clamp(Math.floor(Math.log2(1024 / (2 * h * 256))), 6, 14), n = Math.pow(2, z);
+  const tx0 = Math.floor((cx - h) * n), tx1 = Math.floor((cx + h) * n), ty0 = Math.floor((cy - h) * n), ty1 = Math.floor((cy + h) * n);
+  const cols = tx1 - tx0 + 1, rows = ty1 - ty0 + 1, W = cols * 256, H = rows * 256;
+  const elev = new Float32Array(W * H);
+  let got = 0;
+  const jobs = [];
+  for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++){
+    jobs.push(fetchDemTile(z, tx, ty).then(a => {
+      if (!a) return; got++;
+      const ox = (tx - tx0) * 256, oy = (ty - ty0) * 256;
+      for (let r = 0; r < 256; r++) elev.set(a.subarray(r * 256, r * 256 + 256), (oy + r) * W + ox);
+    }));
+  }
+  await Promise.all(jobs);
+  liveBusy = false;
+  if (!got){ setStatus('#liveStatus', '標高データを読み込めませんでした。通信状況を確かめて、もう一度お試しください。', 'err'); return false; }
+  const slug = `map_${lat.toFixed(3)}N_${lon.toFixed(3)}E`;
+  S.src = {kind: 'live', name: label, slug, W, H, elev, z, mx0: (tx0 + 0.5 / 256) / n, my0: (ty0 + 0.5 / 256) / n, mStep: 1 / (256 * n),
+    credit: '標高データ：国土地理院 標高タイル（基盤地図情報 数値標高モデル）　地図データ：© OpenStreetMap contributors', spanM};
+  S.center = [cx, cy];
+  S.city = null; S.cityKey = '';
+  buildPickerImage();
+  setStatus('#liveStatus', `「${label}」を読み込みました。`, 'ok');
+  if (!S.text.trim() || S.text === '富士山 3776m'){ S.text = label.slice(0, 20); $('#txt').value = S.text; }
+  onAreaChanged(true);
+  return true;
+}
+let reloadT = 0;
+function maybeReloadLive(){
+  if (!S.src || S.src.kind !== 'live') return;
+  clearTimeout(reloadT);
+  reloadT = setTimeout(() => {
+    if (liveBusy) return;
+    const b = srcBounds(S.src), h = halfMerc();
+    const out = S.center[0] - h < b.x0 || S.center[0] + h > b.x1 || S.center[1] - h < b.y0 || S.center[1] + h > b.y1;
+    const coarse = S.src.z < 14 && S.src.spanM > S.sizeM * 5;
+    if (out || coarse){ const [lon, lat] = mercToLonLat(S.center[0], S.center[1]); loadLiveContext(lon, lat, S.src.name); }
+    if (S.mode === 'lamp' && S.lamp.style === 'city') loadCity();
+  }, 500);
+}
+async function geocode(q){
+  const r = await fetch(GSI_SEARCH + '?q=' + encodeURIComponent(q));
+  const js = await r.json();
+  return js.slice(0, 8).map(f => ({title: f.properties.title, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1]}));
+}
+async function loadCity(){
+  if (!S.live || S.mode !== 'lamp' || S.lamp.style !== 'city') return;
+  if (S.sizeM > 5000){ setStatus('#liveStatus', '街の道と建物は、範囲が5km以下のときに使えます。', 'err'); return; }
+  const key = S.center[0].toFixed(7) + ',' + S.center[1].toFixed(7) + ',' + S.sizeM;
+  if (S.cityKey === key || S.cityBusy) return;
+  S.cityBusy = true;
+  setStatus('#liveStatus', '道と建物のデータを読み込んでいます…');
+  try {
+    const h = halfMerc();
+    const [w, n] = mercToLonLat(S.center[0] - h, S.center[1] - h), [e, s] = mercToLonLat(S.center[0] + h, S.center[1] + h);
+    const bb = `${s.toFixed(6)},${w.toFixed(6)},${n.toFixed(6)},${e.toFixed(6)}`;
+    const q = `[out:json][timeout:25];(way["highway"](${bb});way["building"](${bb});way["natural"="water"](${bb});way["waterway"~"river|canal|stream"](${bb});way["railway"="rail"](${bb}););out geom;`;
+    const r = await fetch(OVERPASS, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const js = await r.json();
+    S.city = {ways: js.elements.filter(x => x.type === 'way' && x.geometry).map(x => ({tags: x.tags || {}, pts: x.geometry.map(g => lonLatToMerc(g.lon, g.lat))}))};
+    S.cityKey = key;
+    setStatus('#liveStatus', `道と建物 ${fmt(S.city.ways.length)} 件を読み込みました。`, 'ok');
+    schedule();
+  } catch (e){
+    setStatus('#liveStatus', '道と建物のデータを読み込めませんでした。少し待ってからもう一度お試しください。', 'err');
+  } finally { S.cityBusy = false; }
+}
+
+/* ================= routes ================= */
+function parseGPX(text){
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  let pts = $$('trkpt', doc);
+  if (!pts.length) pts = $$('rtept', doc);
+  if (!pts.length) pts = $$('wpt', doc);
+  const out = [];
+  for (const p of pts){
+    const lat = parseFloat(p.getAttribute('lat')), lon = parseFloat(p.getAttribute('lon'));
+    if (isFinite(lat) && isFinite(lon)) out.push(lonLatToMerc(lon, lat));
+  }
+  return out;
+}
+function makeDemoRoute(){
+  const src = S.src;
+  let best = 0; for (let k = 1; k < src.elev.length; k++) if (src.elev[k] > src.elev[best]) best = k;
+  const top = [src.mx0 + (best % src.W) * src.mStep, src.my0 + Math.floor(best / src.W) * src.mStep];
+  const topE = src.elev[best], target = topE - 1300;
+  let start = top.slice();
+  const dirX = 0.3, dirY = 1, dl = Math.hypot(dirX, dirY);
+  for (let d = 1; d < 2000; d++){
+    const p = [top[0] + dirX / dl * d * src.mStep * 0.5, top[1] + dirY / dl * d * src.mStep * 0.5];
+    start = p;
+    if (elevAt(src, p[0], p[1]) <= target) break;
+  }
+  const pts = [], legs = 9, N = 260;
+  const vx = top[0] - start[0], vy = top[1] - start[1], L = Math.hypot(vx, vy), px = -vy / L, py = vx / L;
+  for (let i = 0; i <= N; i++){
+    const t = i / N, along = Math.pow(t, 0.92);
+    const amp = 0.17 * L * Math.pow(1 - t, 0.7);
+    const off = Math.sin(t * Math.PI * legs) * amp;
+    pts.push([start[0] + vx * along + px * off, start[1] + vy * along + py * off]);
+  }
+  return pts;
+}
+function setRoute(pts, name, demo){
+  S.route = pts && pts.length > 1 ? pts : null; S.routeName = name || ''; S.routeDemo = !!demo;
+  $('#clearRoute').hidden = !S.route; $('#fitRoute').hidden = !S.route || demo;
+  if (S.route) setStatus('#routeStatus', demo ? '仮ルートを表示中（表示の確認用で、実在の登山道ではありません）' : `「${name}」 ${fmt(pts.length)} 点を読み込みました。`, demo ? '' : 'ok');
+  else setStatus('#routeStatus', '');
+  onAreaChanged(true);
+}
+function fitToRoute(){
+  if (!S.route) return;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of S.route){ x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  S.center = [(x0 + x1) / 2, (y0 + y1) / 2];
+  const spanM = Math.max(x1 - x0, y1 - y0) * mpm(centerLat()) * 1.25;
+  S.sizeM = clamp(Math.ceil(spanM / 500) * 500, 1000, maxSizeM());
+  $('#size').value = S.sizeM;
+  if (S.src.kind === 'live'){ const [lon, lat] = mercToLonLat(S.center[0], S.center[1]); loadLiveContext(lon, lat, S.src.name); return; }
+  onAreaChanged(true);
+}
+
+/* ================= UI glue ================= */
+function setStatus(sel, msg, kind){ const el = $(sel); el.textContent = msg || ''; el.className = 'status' + (kind ? ' ' + kind : ''); }
+let rafId = 0, last = null;
+function schedule(){ if (rafId) return; rafId = requestAnimationFrame(() => { rafId = 0; rebuild(); }); }
+function onAreaChanged(now){
+  clampCenter();
+  updateLabels();
+  drawPicker();
+  if (now) rebuild(); else schedule();
+}
+function rebuild(){
+  if (!S.src) return;
+  if (S.mode === 'relief'){ last = buildRelief(false); showRelief(last); }
+  else { last = buildLamp(false); showLamp(last); }
+  updateReadout();
+}
+function scaleText(){ return '1 : ' + fmt(Math.round(S.sizeM * 1000 / (S.mode === 'relief' ? S.relief.widthMm : S.lamp.widthMm))); }
+function updateLabels(){
+  $('#sizeOut').textContent = (S.sizeM / 1000).toFixed(1) + ' km 四方';
+  const [lon, lat] = mercToLonLat(S.center[0], S.center[1]);
+  $('#coords').textContent = `中心 北緯 ${lat.toFixed(5)}°　東経 ${lon.toFixed(5)}°　縮尺 ${scaleText()}`;
+  $('#rWOut').textContent = S.relief.widthMm + ' mm';
+  $('#rExOut').textContent = '× ' + S.relief.exag.toFixed(1);
+  $('#rBaseOut').textContent = S.relief.baseMm.toFixed(1) + ' mm';
+  $('#lWOut').textContent = S.lamp.widthMm + ' mm';
+  $('#lCOut').textContent = S.lamp.contrast.toFixed(2);
+  $('#lMinOut').textContent = S.lamp.tmin.toFixed(1) + ' mm';
+  $('#lMaxOut').textContent = S.lamp.tmax.toFixed(1) + ' mm';
+  $('#tSizeOut').textContent = S.textMm.toFixed(1) + ' mm';
+  $('#credit').textContent = S.src ? S.src.credit : '';
+}
+function estTris(nx, ny){ return 2 * (nx - 1) * (ny - 1) + 3 * (2 * (nx + ny) - 4); }
+function exportDims(){
+  if (S.mode === 'relief'){
+    const n = S.relief.res === 'high' ? 480 : 340, cell = S.relief.widthMm / (n - 1);
+    const plate = S.text.trim() ? Math.max(4, Math.round((S.textMm + 7) / cell)) : 0;
+    return {tris: estTris(n, n + plate)};
+  }
+  const cell = S.lamp.res === 'high' ? Math.max(0.2, S.lamp.widthMm / 620) : Math.max(0.28, S.lamp.widthMm / 430), ni = Math.round(S.lamp.widthMm / cell) + 1;
+  const FB = S.text.trim() ? S.textMm + 10 : S.lamp.frameMm;
+  return {tris: estTris(ni + 2 * Math.round(S.lamp.frameMm / cell), ni + Math.round(S.lamp.frameMm / cell) + Math.round(FB / cell))};
+}
+function volumeMm3(r){ let s = 0; for (let k = 0; k < r.Z.length; k++) s += r.Z[k]; return s * r.cell * r.cell; }
+function updateReadout(){
+  if (!last) return;
+  const items = [];
+  const ex = exportDims(), sizeMB = (84 + ex.tris * 50) / 1048576;
+  if (last.kind === 'relief'){
+    const D = (last.ny - 1) * last.cell, W = (last.nx - 1) * last.cell;
+    const grams = volumeMm3(last) / 1000 * 1.24 * 0.32;
+    items.push(['大きさ', `${fmt(W)} × ${fmt(D)} × ${fmt(last.zmax, 1)} mm`], ['縮尺', scaleText()], ['標高', `${fmt(last.hmin)}–${fmt(last.hmax)} m`],
+      ['高さの強調', '× ' + S.relief.exag.toFixed(1)], ['フィラメント目安', `約 ${fmt(Math.max(1, grams))} g`], ['STL', `${fmt(ex.tris)} 面・約 ${sizeMB.toFixed(1)} MB`]);
+  } else {
+    const grams = volumeMm3(last) / 1000 * 1.24;
+    const d = lampBoxDims(last.widthMm, last.heightMm, last.tF);
+    items.push(['パネル', `${fmt(last.widthMm)} × ${fmt(last.heightMm)} × ${last.tF.toFixed(1)} mm`], ['ランプの箱', `${fmt(d.Wb)} × ${fmt(d.Db)} × ${fmt(d.Hb)} mm`],
+      ['縮尺', scaleText()], ['厚み', `${S.lamp.tmin.toFixed(1)}–${S.lamp.tmax.toFixed(1)} mm`], ['パネルのフィラメント', `約 ${fmt(Math.max(1, grams))} g`], ['STL（パネル）', `${fmt(ex.tris)} 面・約 ${sizeMB.toFixed(1)} MB`]);
+  }
+  $('#readout').innerHTML = items.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  const files = S.mode === 'relief'
+    ? [[`${S.src.slug}_relief_${S.relief.widthMm}mm.stl`, '立体地図'], ['README.txt', '印刷のおすすめ設定と出典']]
+    : [[`${S.src.slug}_lamp_panel.stl`, 'ランプのパネル'], ['lamp_box.stl', 'ランプの箱（LEDを入れる）'], ['lamp_lid.stl', '箱のふた'], ['README.txt', '印刷のおすすめ設定と出典']];
+  $('#fileList').innerHTML = files.map(([n, d]) => `<li><span>${d}</span><span>${n}</span></li>`).join('');
+}
+function readme(r){
+  const [lon, lat] = mercToLonLat(S.center[0], S.center[1]);
+  const L = ['立体地図工房で作ったデータです。', '',
+    `場所：${S.src.name}（中心 北緯${lat.toFixed(5)}° 東経${lon.toFixed(5)}°）`,
+    `範囲：${(S.sizeM / 1000).toFixed(1)} km 四方　縮尺 ${scaleText()}`,
+    `作成日：${new Date().toLocaleDateString('ja-JP')}`, ''];
+  if (r.kind === 'relief'){
+    L.push('■ 立体地図', `大きさ：${fmt((r.nx - 1) * r.cell)} × ${fmt((r.ny - 1) * r.cell)} × ${fmt(r.zmax, 1)} mm（高さの強調 ×${S.relief.exag.toFixed(1)}）`,
+      'おすすめ設定：PLA／積層 0.2mm（細部重視なら 0.12mm）／インフィル 15%／サポートなし（底面が平らです）',
+      'ルートを別の色にしたいときは、スライサーで高さを指定してフィラメントを替えると目立ちます。');
+  } else {
+    const d = lampBoxDims(r.widthMm, r.heightMm, r.tF);
+    L.push('■ 光るランプ', `パネル：${fmt(r.widthMm)} × ${fmt(r.heightMm)} mm、厚み ${S.lamp.tmin.toFixed(1)}–${S.lamp.tmax.toFixed(1)} mm（枠 ${r.tF.toFixed(1)} mm）`,
+      'パネルのおすすめ設定：白PLA／積層 0.12mm／インフィル 100%／壁の数を多め（4以上）。縦置きで印刷すると模様がきれいに出ます。',
+      `箱：${fmt(d.Wb)} × ${fmt(d.Db)} × ${fmt(d.Hb)} mm（積層 0.2mm／インフィル 15%／サポートなし）。ふたは平らな面を下にして印刷します。`,
+      '組み立て：パネルを模様の凸凹側を手前にして、箱の前のすき間に上から差し込みます。箱の中に電球色のUSB LEDを入れ、ケーブルは背面下の切り欠きから出します。');
+  }
+  L.push('', '出典：' + S.src.credit);
+  return L.join('\r\n');
+}
+const dlP = (window.claude && typeof window.claude.use === 'function') ? window.claude.use('downloads').catch(() => null) : Promise.resolve(undefined);
+async function offerFile(name, blob){
+  const dl = await dlP;
+  if (dl){
+    try {
+      const res = await dl.save({filename: name, data: blob});
+      setStatus('#saveStatus', res && res.status === 'delivered' ? '送りました。' : '保存しました。', 'ok');
+    } catch (e){
+      const code = e && e.code;
+      const msg = {declined: '保存をやめました。', rate_limited: '保存の確認画面が開いています。閉じてからもう一度押してください。',
+        too_large: 'ファイルが大きすぎます。精細さを「標準」にしてください。'}[code] || 'このページでは保存できませんでした。';
+      setStatus('#saveStatus', msg, code === 'declined' ? '' : 'err');
+    }
+    return;
+  }
+  if (dl === null){ setStatus('#saveStatus', 'このページでは保存できません。', 'err'); return; }
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 5000);
+  setStatus('#saveStatus', '保存しました。', 'ok');
+}
+async function doExport(){
+  const btn = $('#save'); btn.disabled = true;
+  setStatus('#saveStatus', 'データを作っています…');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const files = [], enc = new TextEncoder(), slug = S.src.slug;
+    let r;
+    if (S.mode === 'relief'){
+      r = buildRelief(true);
+      const m = heightmapSolid(r.Z, r.nx, r.ny, r.cell);
+      files.push({name: `${slug}_relief_${S.relief.widthMm}mm.stl`, data: stlBinary(m.pos, m.idx, 'relief')});
+    } else {
+      r = buildLamp(true);
+      const m = heightmapSolid(r.Z, r.nx, r.ny, r.cell);
+      files.push({name: `${slug}_lamp_panel.stl`, data: stlBinary(m.pos, m.idx, 'lamp panel')});
+      const bx = lampBox(r.widthMm, r.heightMm, r.tF), lid = lampLid(r.widthMm, r.heightMm, r.tF);
+      files.push({name: 'lamp_box.stl', data: stlBinary(bx.pos, bx.idx, 'lamp box')});
+      files.push({name: 'lamp_lid.stl', data: stlBinary(lid.pos, lid.idx, 'lamp lid')});
+    }
+    files.push({name: 'README.txt', data: enc.encode('﻿' + readme(r))});
+    const zip = await makeZip(files);
+    window.__lastZip = zip;
+    setStatus('#saveStatus', `ZIP ${(zip.size / 1048576).toFixed(1)} MB を用意しました。`);
+    const place = (S.src.name || slug).replace(/[\\/:*?"<>|\s]+/g, '').slice(0, 30) || slug;
+    await offerFile(`${place}_${S.mode === 'relief' ? '立体地図' : 'ランプ'}.zip`, zip);
+  } catch (e){
+    setStatus('#saveStatus', 'データを作れませんでした：' + (e && e.message ? e.message : e), 'err');
+  } finally { btn.disabled = false; }
+}
+function pressGroup(btns, active){ btns.forEach(b => b.setAttribute('aria-pressed', String(b === active))); }
+function bindUI(){
+  const slider = (id, fn) => { $(id).addEventListener('input', e => { fn(parseFloat(e.target.value)); updateLabels(); schedule(); }); };
+  $('#size').addEventListener('input', e => {
+    S.sizeM = Math.min(parseFloat(e.target.value), maxSizeM()); e.target.value = S.sizeM; onAreaChanged();
+  });
+  $('#size').addEventListener('change', maybeReloadLive);
+  slider('#rW', v => S.relief.widthMm = v);
+  slider('#rEx', v => S.relief.exag = v);
+  slider('#rBase', v => S.relief.baseMm = v);
+  slider('#lW', v => S.lamp.widthMm = v);
+  slider('#lC', v => S.lamp.contrast = v);
+  slider('#lMin', v => { S.lamp.tmin = Math.min(v, S.lamp.tmax - 0.8); });
+  slider('#lMax', v => { S.lamp.tmax = Math.max(v, S.lamp.tmin + 0.8); });
+  slider('#tSize', v => S.textMm = v);
+  $('#txt').addEventListener('input', e => { S.text = e.target.value; schedule(); });
+  $$('#modeSeg button').forEach(b => b.addEventListener('click', () => {
+    S.mode = b.dataset.mode; pressGroup($$('#modeSeg button'), b);
+    $('#reliefOpts').hidden = S.mode !== 'relief'; $('#lampOpts').hidden = S.mode !== 'lamp'; $('#litSeg').hidden = S.mode !== 'lamp';
+    updateLabels(); rebuild(); if (S.mode === 'lamp' && S.lamp.style === 'city') loadCity();
+  }));
+  $$('[data-rres]').forEach(b => b.addEventListener('click', () => { S.relief.res = b.dataset.rres; pressGroup($$('[data-rres]'), b); updateReadout(); }));
+  $$('[data-lres]').forEach(b => b.addEventListener('click', () => { S.lamp.res = b.dataset.lres; pressGroup($$('[data-lres]'), b); updateReadout(); }));
+  $$('[data-style]').forEach(b => b.addEventListener('click', () => {
+    S.lamp.style = b.dataset.style; pressGroup($$('[data-style]'), b); rebuild(); if (S.lamp.style === 'city') loadCity();
+  }));
+  $$('#litSeg button').forEach(b => b.addEventListener('click', () => { S.lit = b.dataset.lit === '1'; pressGroup($$('#litSeg button'), b); rebuild(); }));
+  $('#resetCam').addEventListener('click', () => { camKey = ''; rebuild(); });
+  $('#gpx').addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    if (!S.src){ setStatus('#routeStatus', '先に場所を選んでください。', 'err'); e.target.value = ''; return; }
+    try {
+      const pts = parseGPX(await f.text());
+      if (pts.length < 2) throw new Error('点が見つかりません');
+      setRoute(pts, f.name.replace(/\.gpx$/i, ''), false);
+      if (S.src.kind === 'sample'){
+        const b = srcBounds(S.src), inside = pts.filter(p => p[0] >= b.x0 && p[0] <= b.x1 && p[1] >= b.y0 && p[1] <= b.y1).length;
+        if (inside < pts.length / 2) setStatus('#routeStatus', 'このルートは富士山サンプルの範囲の外です。日本中で使える版で読み込むと表示されます。', 'err');
+        else fitToRoute();
+      } else fitToRoute();
+    } catch (err){ setStatus('#routeStatus', 'GPXを読めませんでした（' + err.message + '）。', 'err'); }
+    e.target.value = '';
+  });
+  $('#gpxLabel').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); $('#gpx').click(); } });
+  $('#demoRoute').addEventListener('click', () => { if (S.src) setRoute(makeDemoRoute(), '仮ルート', true); });
+  $('#clearRoute').addEventListener('click', () => setRoute(null));
+  $('#fitRoute').addEventListener('click', fitToRoute);
+  $('#save').addEventListener('click', () => { if (S.src) doExport(); });
+  $('#sampleChip').addEventListener('click', () => {
+    pressGroup([$('#sampleChip')], $('#sampleChip'));
+    useSample();
+  });
+  const go = async () => {
+    const q = $('#q').value.trim(); if (!q) return;
+    setStatus('#liveStatus', '探しています…');
+    try {
+      const res = await geocode(q);
+      $('#results').innerHTML = '';
+      if (!res.length){ setStatus('#liveStatus', '見つかりませんでした。別の言い方で試してください。', 'err'); return; }
+      setStatus('#liveStatus', `${res.length} 件見つかりました。`);
+      for (const r of res){
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'btn quiet'; b.textContent = r.title;
+        b.addEventListener('click', () => { $('#results').innerHTML = ''; $('#sampleChip').setAttribute('aria-pressed', 'false'); loadLiveContext(r.lon, r.lat, r.title); });
+        $('#results').appendChild(b);
+      }
+    } catch (e){ setStatus('#liveStatus', '検索できませんでした。通信状況を確かめてください。', 'err'); }
+  };
+  $('#qGo').addEventListener('click', go);
+  $('#q').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); go(); } });
+  $('#here').addEventListener('click', () => {
+    if (!navigator.geolocation){ setStatus('#liveStatus', 'この端末では現在地を使えません。', 'err'); return; }
+    setStatus('#liveStatus', '現在地を調べています…');
+    navigator.geolocation.getCurrentPosition(p => { $('#sampleChip').setAttribute('aria-pressed', 'false'); loadLiveContext(p.coords.longitude, p.coords.latitude, '現在地の周辺'); },
+      () => setStatus('#liveStatus', '現在地を取得できませんでした。', 'err'), {enableHighAccuracy: false, timeout: 10000});
+  });
+}
+function useSample(){
+  if (!SAMPLE_SRC) return;
+  S.src = SAMPLE_SRC;
+  S.city = null; S.cityKey = '';
+  const top = (() => { let b = 0; for (let k = 1; k < S.src.elev.length; k++) if (S.src.elev[k] > S.src.elev[b]) b = k; return b; })();
+  S.center = [S.src.mx0 + (top % S.src.W) * S.src.mStep, S.src.my0 + Math.floor(top / S.src.W) * S.src.mStep];
+  S.sizeM = Math.min(S.sizeM, maxSizeM()); $('#size').value = S.sizeM;
+  if (S.route && !S.routeDemo){ /* keep user route */ }
+  buildPickerImage();
+  onAreaChanged(true);
+}
+
+let SAMPLE_SRC = null;
+function start(){
+  SAMPLE_SRC = SAMPLE_META ? makeSampleSource() : null;
+  S.src = SAMPLE_SRC;
+  initViewer();
+  bindUI();
+  bindPicker();
+  if (SAMPLE_SRC){ $('#size').max = String(maxSizeM()); useSample(); }
+  else {
+    $('#sampleChip').hidden = true;
+    $('#sampleNote').textContent = '地名や住所で探すと、日本中どこでも作れます。標高は国土地理院、道と建物はOpenStreetMapのデータを使います。';
+    $('#stageNote').textContent = '地形データを読み込んでいます…';
+    updateLabels();
+  }
+  if (document.fonts && document.fonts.load){
+    document.fonts.load('700 20px "IBM Plex Sans JP"', S.text).then(() => schedule()).catch(() => {});
+  }
+  probeLive().then(ok => {
+    S.live = ok;
+    if (ok){
+      $('#liveBox').hidden = false; $('#cityChip').hidden = false;
+      $('#sampleNote').textContent = '地名や住所で探すと、日本中どこでも作れます。標高は国土地理院、道と建物はOpenStreetMapのデータを使います。';
+      $('#size').max = '30000';
+      if (!SAMPLE_SRC) loadLiveContext(138.7274, 35.3606, '富士山').then(() => { $('#stageNote').textContent = 'ドラッグで回転、ピンチで拡大'; });
+    } else if (!SAMPLE_SRC){
+      $('#stageNote').textContent = '';
+      setStatus('#liveStatus', '地図データに接続できませんでした。通信状況を確かめて、ページを読み込み直してください。', 'err');
+    }
+  });
+  window.__app = {S, buildRelief, buildLamp, heightmapSolid, lampBox, lampLid, stlBinary, makeZip, doExport, rebuild, setRoute, makeDemoRoute, fitToRoute, loadLiveContext, loadCity, readme};
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+</script>
+
+<script>if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});</script>
+</body>
+</html>
