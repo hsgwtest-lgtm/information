@@ -115,6 +115,7 @@ async function enrich(token) {
   await buildRoutes(token, seg => seg.forced || seg.mode === 'walk' || seg.mode === 'plane' || stationsKnown(seg));
   if (token !== V.token) return;
   if (placesJob) {
+    setBusy('駅や名所を調べています…（少し時間がかかります）');
     const got = await placesJob;
     if (token !== V.token) return;
     Object.assign(V.places, got);
@@ -526,7 +527,7 @@ function openSpot(i) {
     const cur = V.result.spots.find(x => x.key === key);
     panel.close();
     setSheet('peek');
-    requestAnimationFrame(() => flyToVisible([cur.lat, cur.lon], 17, insets()));
+    requestAnimationFrame(() => flyToVisible([cur.lat, cur.lon], 16, insets()));
   });
 }
 

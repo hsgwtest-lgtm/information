@@ -82,7 +82,7 @@ function wait(ms, onFrame) {
     let elapsed = 0, last = performance.now();
     const tick = now => {
       if (!R.active) return resolve('stop');
-      const dt = Math.min(now - last, 80);
+      const dt = Math.min(now - last, 250);
       last = now;
       if (!R.paused) elapsed += dt * R.speed;
       if (R.skip) { onFrame?.(1); return resolve('skip'); }
@@ -241,7 +241,7 @@ async function playLeg(st) {
   R.mover.setIcon(moverIcon(leg.mode));
   setHud({ label: `${m.icon} ${m.label}${leg.label ? `（${leg.label}）` : ''} · ${fmtKm(km)}`, clock: fmtClock(st.t0, st.off) });
   const c = leg.coords;
-  const maxZoom = leg.mode === 'walk' ? 17 : leg.mode === 'plane' ? 8 : 15;
+  const maxZoom = leg.mode === 'walk' ? 16 : leg.mode === 'plane' ? 8 : 15;
   flyToBoundsVisible(L.latLngBounds(c), insets(), maxZoom, 0.9);
   if ((await wait(900)) === 'skip') { R.mover.setLatLng(c[c.length - 1]); return; }
   const cum = cumulative(c);
@@ -264,13 +264,13 @@ async function playSpot({ spot: s }) {
   R.mover.setIcon(moverIcon('spot'));
   const photos = (s.highlights.length ? s.highlights : s.photos).filter(p => p.full || p.thumb);
   if (!photos.length) {
-    flyToVisible([s.lat, s.lon], Math.max(16, Math.min(map.getZoom(), 17)), insets());
+    flyToVisible([s.lat, s.lon], 16, insets());
     await wait(1400, setProgress);
     return;
   }
   showPhoto(photos[0], s, 0, photos.length);
   try { await $('rpPhotoImg').decode(); } catch { /* show anyway */ }
-  flyToVisible([s.lat, s.lon], Math.max(16, Math.min(map.getZoom(), 17)), insets(true));
+  flyToVisible([s.lat, s.lon], 16, insets(true));
   const per = photos.length > 4 ? 1900 : 2700;
   for (let k = 0; k < photos.length; k++) {
     if (k > 0) showPhoto(photos[k], s, k, photos.length);

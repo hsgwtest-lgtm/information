@@ -83,12 +83,15 @@ export async function route(profile, a, b) {
 
 /* ---------------- Places (Overpass) ---------------- */
 function landmarkScore(t) {
-  if (t.tourism) return { attraction: 10, theme_park: 10, zoo: 10, aquarium: 10, museum: 9, gallery: 8, viewpoint: 8, artwork: 6, hotel: 5, camp_site: 5, picnic_site: 4, information: 0 }[t.tourism] ?? 5;
+  if (t.tourism) return { attraction: 10, theme_park: 10, zoo: 10, aquarium: 10, museum: 8, gallery: 7, viewpoint: 8, artwork: 6, hotel: 5, camp_site: 5, picnic_site: 4, information: 0 }[t.tourism] ?? 5;
   if (t.historic) return { castle: 10, monument: 7, ruins: 7, archaeological_site: 7, memorial: 3, wayside_shrine: 2, boundary_stone: 0 }[t.historic] ?? 6;
   if (t.aeroway) return { aerodrome: 10, terminal: 9 }[t.aeroway] ?? 0;
-  if (t.amenity) return { place_of_worship: 9, marketplace: 7, theatre: 7, arts_centre: 7, university: 5, college: 4, townhall: 4, library: 4, restaurant: 3, cafe: 3, hospital: 2, school: 2, parking: 0, kindergarten: 0 }[t.amenity] ?? 1;
-  if (t.leisure) return { garden: 8, park: 7, stadium: 8, water_park: 8, beach_resort: 8, marina: 6, nature_reserve: 4, golf_course: 4, sports_centre: 4, pitch: 1, playground: 1 }[t.leisure] ?? 2;
-  if (t.natural) return { beach: 8, peak: 8, volcano: 9, cape: 8, bay: 6, water: 5, wood: 2 }[t.natural] ?? 3;
+  if (t.amenity) return { place_of_worship: 9, marketplace: 7, theatre: 7, arts_centre: 7, university: 5, college: 4, townhall: 4, library: 4, restaurant: 3, cafe: 3, bar: 3, pub: 3, hospital: 2, school: 2, parking: 0, kindergarten: 0 }[t.amenity] ?? 1;
+  if (t.leisure) return { garden: 8, park: 7, stadium: 8, water_park: 8, beach_resort: 8, marina: 6, nature_reserve: 3, golf_course: 4, sports_centre: 4, pitch: 1, playground: 1 }[t.leisure] ?? 2;
+  if (t.natural) {
+    if (t.natural === 'water') return ['lake', 'reservoir', 'pond', 'lagoon'].includes(t.water) ? 5 : 0; // lakes yes, rivers no
+    return { beach: 8, peak: 8, volcano: 9, cape: 8, hot_spring: 8, geyser: 8 }[t.natural] ?? 0;      // bays, woods etc. are too broad
+  }
   return 0;
 }
 const nameOf = t => t?.['name:ja'] || t?.name || null;
@@ -122,13 +125,16 @@ function parsePlaces(spots, elements) {
       if (!st || distM < st.distM) out[cur].station = { name: name.replace(/駅$/, ''), lat: pos.lat, lon: pos.lon, distM: Math.round(distM) };
       continue;
     }
-    const score = landmarkScore(t) + (pos ? 3 : 0); // a named thing right at the spot beats an enclosing area
+    const base = landmarkScore(t);
+    if (base < 3) continue;
+    // Being inside a named place (shrine grounds, park) is strong evidence; famous things get a nudge.
+    const score = base + (pos ? 1 : 2) + (t.wikidata || t.wikipedia ? 2 : 0);
     cands[cur].push({ name, score, near: !!pos });
   }
   out.forEach((o, i) => {
-    if (o.station && o.station.distM <= 120) cands[i].push({ name: `${o.station.name}駅`, score: 7, near: true });
+    if (o.station && o.station.distM <= 120) cands[i].push({ name: `${o.station.name}駅`, score: 9, near: true });
     const best = cands[i].sort((a, b) => b.score - a.score || Number(b.near) - Number(a.near))[0];
-    if (best && best.score >= 4) o.landmark = best.name;
+    if (best && best.score >= 5) o.landmark = best.name;
   });
   return out;
 }
@@ -137,7 +143,7 @@ function parsePlaces(spots, elements) {
 export async function cachedPlaces(spots) {
   const out = {};
   for (const s of spots) {
-    const hit = await db.kvGet(`place:${r4(s.lat)},${r4(s.lon)}`);
+    const hit = await db.kvGet(`place2:${r4(s.lat)},${r4(s.lon)}`);
     if (hit) out[s.key] = hit;
   }
   return out;
@@ -152,7 +158,7 @@ export async function places(spots) {
   const result = {};
   const todo = [];
   for (const s of spots) {
-    const hit = await db.kvGet(`place:${r4(s.lat)},${r4(s.lon)}`);
+    const hit = await db.kvGet(`place2:${r4(s.lat)},${r4(s.lon)}`);
     if (hit) result[s.key] = hit; else todo.push(s);
   }
   for (let i = 0; i < todo.length; i += 25) {
@@ -168,7 +174,7 @@ export async function places(spots) {
     if (!elements) continue;
     parsePlaces(chunk, elements).forEach((v, k) => {
       result[chunk[k].key] = v;
-      db.kvSet(`place:${r4(chunk[k].lat)},${r4(chunk[k].lon)}`, v);
+      db.kvSet(`place2:${r4(chunk[k].lat)},${r4(chunk[k].lon)}`, v);
     });
   }
   return result;
