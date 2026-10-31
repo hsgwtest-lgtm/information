@@ -74,6 +74,26 @@ td:first-child{color:var(--muted);white-space:nowrap;width:1%}
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:99px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:1}
 .off{font-size:11px;color:var(--teal)}
+.pic{margin:-12px -14px 4px;height:150px;border-radius:14px 14px 0 0;background:var(--chip) center/cover no-repeat;position:relative;overflow:hidden}
+.pic .ph-l{position:absolute;inset:0;display:grid;place-items:center;font-size:40px;font-weight:800;color:var(--line);letter-spacing:.05em}
+.pic.ok .ph-l{display:none}
+.pic .cr{position:absolute;right:6px;bottom:4px;font-size:10px;color:#fff;text-shadow:0 0 3px #000}
+#mapwrap{position:relative;height:calc(100dvh - 140px - env(safe-area-inset-top,0px));min-height:360px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--surface)}
+#map{position:absolute;inset:0}
+.mapbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+.mapbar .btn{flex:0 0 auto;padding:6px 12px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:3px;vertical-align:-1px}
+.leaflet-div-icon{background:none!important;border:none!important}
+.mk{width:22px;height:22px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);display:grid;place-items:center;color:#fff;font-size:11px;font-weight:800}
+.mk.h{width:30px;height:30px;background:#c4412b;font-size:14px}
+.pop{width:210px;font-family:var(--font)}
+.pop img{width:100%;height:110px;object-fit:cover;border-radius:8px;display:block;margin-bottom:6px}
+.pop b{font-size:15px}
+.pop .k{color:#666;font-size:12px}
+.pop p{margin:4px 0;font-size:12px}
+.pop a{display:inline-block;margin-top:2px}
+#svgmap{width:100%;height:100%;display:block;touch-action:pan-y}
+#svgmap text{font-size:9px;fill:var(--fg)}
 </style>
 </head>
 <body>
@@ -81,8 +101,9 @@ td:first-child{color:var(--muted);white-space:nowrap;width:1%}
   <div class="top"><h1>ソウル食べ歩き帖</h1><span class="sub" id="cnt"></span></div>
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-v="list" aria-selected="true">スポット</button>
+    <button class="tab" role="tab" data-v="map" aria-selected="false">地図</button>
     <button class="tab" role="tab" data-v="fav" aria-selected="false">★行きたい</button>
-    <button class="tab" role="tab" data-v="info" aria-selected="false">ホテル・便利</button>
+    <button class="tab" role="tab" data-v="info" aria-selected="false">便利</button>
   </div>
   <div id="filters">
     <div class="chips" id="cats"></div>
@@ -153,6 +174,79 @@ const S=[
 {n:"ザ・現代ソウル",k:"더현대 서울",c:"観光",t:1,a:"汝矣島",lat:37.5259,lng:126.9284,e:"地下の<b>フードホール</b>",p:"巨大な吹き抜けのデパート。雨の日の避難先にも"},
 {n:"ロッテワールドタワー ソウルスカイ",k:"롯데월드타워 서울스카이",c:"夜",t:1,a:"蚕室",lat:37.5126,lng:127.1025,e:"ロッテ百貨店のデパ地下",p:"韓国一高いビルの展望台。夕暮れ時が一番綺麗"},
 ];
+// 画像：Wikipediaの記事サムネイル（上から順に見つかったものを使う）
+const WIKI={
+"광장시장":["Gwangjang Market","Bindae-tteok"],
+"동대문 닭한마리골목":["Dak-hanmari"],
+"장충동 족발거리":["Jokbal"],
+"신당동 떡볶이타운":["Sindang-dong tteokbokki town","Tteokbokki"],
+"을지로 노가리골목":["Euljiro","Alaska pollock as food","Hof (bar)"],
+"종로3가 포장마차거리":["Pojangmacha"],
+"명동 노점":["Myeong-dong","Korean hot dog"],
+"남대문시장":["Namdaemun Market"],
+"통인시장":["Tongin Market","Dosirak"],
+"망원시장":["Mangwon Market","Dakgangjeong"],
+"중부시장":["Jungbu Market","Gim (food)"],
+"경동시장":["Gyeongdong Market"],
+"노량진수산시장":["Noryangjin Fisheries Wholesale Market"],
+"마장동 축산물시장":["Majang Meat Market","Hanu (cattle)","Korean barbecue"],
+"왕십리 곱창골목":["Gopchang"],
+"신림동 순대타운":["Sundae (sausage)"],
+"명동교자":["Myeongdong Kyoja","Kalguksu"],
+"하동관":["Hadongkwan","Gomguk"],
+"무교동 북어국집":["Bugeo-guk","Haejang-guk"],
+"우래옥":["Woo Lae Oak","Naengmyeon"],
+"필동면옥":["Naengmyeon"],
+"토속촌 삼계탕":["Samgye-tang"],
+"런던베이글뮤지엄 안국":["London Bagel Museum","Bagel"],
+"동묘 벼룩시장":["Dongmyo","Dongmyo Flea Market"],
+"익선동 한옥거리":["Ikseon-dong","Hanok"],
+"성수동":["Seongsu-dong"],
+"연남동 경의선숲길":["Yeonnam-dong","Gyeongui Line Forest Park"],
+"을지로 힙지로":["Euljiro"],
+"신당동 힙당동":["Sindang-dong","Seoul Jungang Market"],
+"서촌":["Seochon","Seochon, Seoul"],
+"해방촌":["Haebangchon"],
+"문래동":["Mullae-dong"],
+"인사동 쌈지길":["Ssamziegil","Insa-dong","Hotteok"],
+"경복궁":["Gyeongbokgung"],
+"창덕궁":["Changdeokgung"],
+"북촌 한옥마을":["Bukchon Hanok Village"],
+"청계천":["Cheonggyecheon"],
+"동대문디자인플라자":["Dongdaemun Design Plaza"],
+"세운상가 옥상":["Sewoon Sangga"],
+"낙산공원 이화동 벽화마을":["Naksan Park","Ihwa Mural Village","Fortress Wall of Seoul"],
+"N서울타워":["N Seoul Tower"],
+"여의도한강공원":["Yeouido Hangang Park","Hangang Park","Korean fried chicken"],
+"더현대 서울":["The Hyundai Seoul"],
+"롯데월드타워 서울스카이":["Lotte World Tower"]
+};
+const imgMem={};
+let imgCache={};
+try{imgCache=JSON.parse(localStorage.getItem("seoul-img")||"{}")}catch(e){}
+async function imgFor(k){
+  if(k in imgCache)return imgCache[k];
+  if(imgMem[k])return imgMem[k];
+  imgMem[k]=(async()=>{
+    for(const t of (WIKI[k]||[])){
+      try{
+        const r=await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(t.replace(/ /g,"_"))}`);
+        if(!r.ok)continue;const j=await r.json();
+        const u=j.thumbnail&&j.thumbnail.source;
+        if(u&&j.type!=="disambiguation"){const big=u.replace(/\/(\d+)px-/,"/640px-");
+          imgCache[k]=big;try{localStorage.setItem("seoul-img",JSON.stringify(imgCache))}catch(e){}return big}
+      }catch(e){return null}
+    }
+    imgCache[k]="";try{localStorage.setItem("seoul-img",JSON.stringify(imgCache))}catch(e){}return "";
+  })();
+  return imgMem[k];
+}
+const io="IntersectionObserver" in window?new IntersectionObserver(es=>es.forEach(en=>{if(en.isIntersecting){io.unobserve(en.target);loadPic(en.target)}}),{rootMargin:"300px"}):null;
+async function loadPic(el){
+  const u=await imgFor(el.dataset.img);if(!u)return;
+  const im=new Image();im.onload=()=>{el.style.backgroundImage=`url("${u}")`;el.classList.add("ok")};im.src=u;
+}
+function hookPics(){document.querySelectorAll(".pic[data-img]:not([data-h])").forEach(el=>{el.dataset.h=1;io?io.observe(el):loadPic(el)})}
 const CATS=["すべて","市場","名物","夜","エリア","観光","カフェ","穴場"];
 const TIERS=["定番","人気","穴場"];
 const $=s=>document.querySelector(s);
@@ -176,7 +270,8 @@ function chips(){
 function card(s,i){
   const dh=km(HOTEL,s), dn=st.here?km(st.here,s):null;
   const nav=`https://map.naver.com/p/search/${encodeURIComponent(s.k)}`;
-  return `<article class="card">
+  return `<article class="card" id="s-${S.indexOf(s)}">
+   <div class="pic" data-img="${s.k}"><span class="ph-l">${s.c}</span><span class="cr">Wikipedia</span></div>
    <div class="head"><div class="t"><div class="name">${s.n}</div>
      <div class="ko">${s.k}</div></div>
      <button class="star" data-f="${s.k}" aria-pressed="${fav.has(s.k)}" aria-label="行きたい">★</button></div>
@@ -184,7 +279,7 @@ function card(s,i){
      <span class="b d">ホテルから${fmt(dh)}${dn!=null?` ・ 現在地から${fmt(dn)}`:""}</span></div>
    <div class="eat">🍴 ${s.e}</div>
    <div class="tip">${s.p}</div>
-   <div class="acts"><button class="btn" data-copy="${s.k}">ハングルをコピー</button><a class="btn" href="${nav}" target="_blank" rel="noopener">NAVER地図で開く</a></div>
+   <div class="acts"><button class="btn" data-copy="${s.k}">ハングルをコピー</button><button class="btn" data-mapto="${S.indexOf(s)}">地図で見る</button><a class="btn" href="${nav}" target="_blank" rel="noopener">NAVER地図</a></div>
   </article>`;
 }
 function list(onlyFav){
@@ -225,14 +320,95 @@ function info(){
 }
 function render(){
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===st.v));
-  $("#filters").hidden=st.v!=="list";
+  $("#filters").hidden=st.v!=="list"&&st.v!=="map";
   const m=$("#main");
+  if(st.v==="map"){renderMap();return}
+  if(map){map.remove();map=null}
   if(st.v==="info"){m.innerHTML=info();$("#cnt").textContent="";offlineState();return}
   const a=list(st.v==="fav");
   $("#cnt").textContent=`${a.length}件`;
   m.innerHTML=(st.v==="list"?halloween:"")+(a.length?a.map(card).join(""):
     `<div class="empty">${st.v==="fav"?"★を押したスポットがここに集まります":"条件に合うスポットがありません"}</div>`);
+  hookPics();
 }
+// ---------- 地図 ----------
+const TCOL=["#2f6fd1","#24796a","#c98a12"];
+let map=null,markers={},Lp=null,focusIdx=null;
+function loadLeaflet(){
+  if(window.L)return Promise.resolve(window.L);
+  if(Lp)return Lp;
+  Lp=new Promise((res,rej)=>{
+    const css=document.createElement("link");css.rel="stylesheet";css.href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";document.head.appendChild(css);
+    const s=document.createElement("script");s.src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    s.onload=()=>res(window.L);s.onerror=()=>{Lp=null;rej()};document.head.appendChild(s);
+    setTimeout(()=>{if(!window.L){Lp=null;rej()}},10000);
+  });
+  return Lp;
+}
+function popHtml(s,i,img){
+  return `<div class="pop">${img?`<img src="${img}" alt="">`:""}<b>${s.n}</b><div class="k">${s.k}</div>
+   <p>${s.e.replace(/<[^>]+>/g,"")}</p>
+   <p style="color:#666">${TIERS[s.t]}・${s.c}・ホテルから${fmt(km(HOTEL,s))}</p>
+   <a href="#" onclick="goDetail(${i});return false">詳細を見る</a>　<a href="https://map.naver.com/p/search/${encodeURIComponent(s.k)}" target="_blank" rel="noopener">NAVER地図</a></div>`;
+}
+function renderMap(){
+  const a=list(false);
+  $("#cnt").textContent=`${a.length}件`;
+  const m=$("#main");
+  if(map){map.remove();map=null}
+  m.innerHTML=`<div class="mapbar"><span><i class="dot" style="background:${TCOL[0]}"></i>定番</span><span><i class="dot" style="background:${TCOL[1]}"></i>人気</span><span><i class="dot" style="background:${TCOL[2]}"></i>穴場</span><span><i class="dot" style="background:#c4412b"></i>ホテル</span>
+    <span style="flex:1"></span><button class="btn" id="mHotel">ホテル周辺</button><button class="btn" id="mAll">全体</button><button class="btn" id="mHere">現在地</button></div>
+    <div id="mapwrap"><div id="map"></div></div>`;
+  loadLeaflet().then(L=>drawLeaflet(L,a)).catch(()=>drawSvg(a));
+}
+function drawLeaflet(L,a){
+  if(st.v!=="map"||!document.getElementById("map"))return;
+  map=L.map("map",{zoomControl:true}).setView([HOTEL.lat,HOTEL.lng],14);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap"}).addTo(map);
+  L.marker([HOTEL.lat,HOTEL.lng],{icon:L.divIcon({html:'<div class="mk h">宿</div>',iconSize:[30,30],iconAnchor:[15,15]}),zIndexOffset:1000})
+    .addTo(map).bindPopup('<div class="pop"><b>現代レジデンス</b><div class="k">서울특별시 중구 마른내로12길 7-4</div></div>');
+  markers={};
+  a.forEach(s=>{
+    const i=S.indexOf(s);
+    const mk=L.marker([s.lat,s.lng],{icon:L.divIcon({html:`<div class="mk" style="background:${TCOL[s.t]}">${s.c[0]}</div>`,iconSize:[22,22],iconAnchor:[11,11]})}).addTo(map);
+    mk.bindPopup(popHtml(s,i,imgCache[s.k]||""),{maxWidth:230});
+    mk.on("popupopen",async()=>{if(!imgCache[s.k]){const u=await imgFor(s.k);if(u)mk.setPopupContent(popHtml(s,i,u))}});
+    markers[i]=mk;
+  });
+  const fitAll=()=>{const pts=a.map(s=>[s.lat,s.lng]).concat([[HOTEL.lat,HOTEL.lng]]);map.fitBounds(pts,{padding:[30,30]})};
+  $("#mAll").onclick=fitAll;
+  $("#mHotel").onclick=()=>map.setView([HOTEL.lat,HOTEL.lng],15);
+  $("#mHere").onclick=()=>{
+    if(!navigator.geolocation)return toast("現在地が使えません");
+    navigator.geolocation.getCurrentPosition(p=>{const ll=[p.coords.latitude,p.coords.longitude];
+      L.circleMarker(ll,{radius:8,color:"#fff",weight:3,fillColor:"#1a73e8",fillOpacity:1}).addTo(map);map.setView(ll,15)},
+      ()=>toast("現在地を取得できませんでした"),{timeout:10000});
+  };
+  if(focusIdx!=null&&markers[focusIdx]){map.setView(markers[focusIdx].getLatLng(),16);markers[focusIdx].openPopup();focusIdx=null}
+  else fitAll();
+}
+function drawSvg(a){
+  // オフライン時：地図タイルなしで位置関係だけ表示
+  const box=document.getElementById("map");if(!box)return;
+  const pts=a.concat([{...HOTEL,n:"ホテル",h:1}]);
+  const lats=pts.map(p=>p.lat),lngs=pts.map(p=>p.lng);
+  const minLa=Math.min(...lats),maxLa=Math.max(...lats),minLo=Math.min(...lngs),maxLo=Math.max(...lngs);
+  let W=400,H=560;const pad=30,cosL=Math.cos(37.56*Math.PI/180);
+  const sc=(W-2*pad)/((maxLo-minLo)*cosL||1);H=Math.max(300,(maxLa-minLa)*sc+2*pad);
+  const X=lo=>pad+(lo-minLo)*cosL*sc,Y=la=>H-pad-(la-minLa)*sc;
+  box.innerHTML=`<svg id="svgmap" viewBox="0 0 ${W} ${H}">
+   <text x="8" y="16" style="font-size:11px;fill:var(--muted)">オフライン表示（位置関係のみ・上が北）</text>
+   ${a.map(s=>`<g data-detail="${S.indexOf(s)}" style="cursor:pointer"><circle cx="${X(s.lng)}" cy="${Y(s.lat)}" r="6" fill="${TCOL[s.t]}" stroke="#fff" stroke-width="1.5"/><text x="${X(s.lng)+8}" y="${Y(s.lat)+3}">${s.n}</text></g>`).join("")}
+   <circle cx="${X(HOTEL.lng)}" cy="${Y(HOTEL.lat)}" r="9" fill="#c4412b" stroke="#fff" stroke-width="2"/><text x="${X(HOTEL.lng)+11}" y="${Y(HOTEL.lat)+4}" style="font-weight:800">ホテル</text></svg>`;
+  ["mAll","mHotel","mHere"].forEach(id=>$("#"+id).hidden=true);
+}
+function goDetail(i){
+  st.v="list";st.cat="すべて";st.tiers=new Set([0,1,2]);st.q="";$("#q").value="";chips();render();
+  const el=document.getElementById("s-"+i);if(el){el.scrollIntoView({block:"start"});scrollBy(0,-150)}
+}
+document.addEventListener("click",e=>{
+  const d=e.target.closest("[data-detail]");if(d){e.preventDefault();goDetail(+d.dataset.detail)}
+});
 function offlineState(){
   const el=$("#offline");if(!el)return;
   el.textContent=("serviceWorker" in navigator&&navigator.serviceWorker.controller)?"✓ オフラインでも見られる状態です":"一度ネットに繋いだ状態で開くとオフライン対応になります";
@@ -244,6 +420,7 @@ document.addEventListener("click",e=>{
   else if(t.dataset.t){const i=+t.dataset.t;st.tiers.has(i)?st.tiers.delete(i):st.tiers.add(i);if(!st.tiers.size)st.tiers.add(i);chips();render()}
   else if(t.dataset.f){const k=t.dataset.f;fav.has(k)?fav.delete(k):fav.add(k);saveFav();t.setAttribute("aria-pressed",fav.has(k));if(st.v==="fav")render()}
   else if(t.dataset.copy)copy(t.dataset.copy);
+  else if(t.dataset.mapto){focusIdx=+t.dataset.mapto;st.v="map";st.cat="すべて";st.tiers=new Set([0,1,2]);st.q="";$("#q").value="";chips();render();scrollTo(0,0)}
 });
 $("#q").addEventListener("input",e=>{st.q=e.target.value.trim();render()});
 $("#sort").addEventListener("change",e=>{
