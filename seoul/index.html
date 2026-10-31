@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16352f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ソウル食べ歩き">
+<title>ソウル食べ歩き帖</title>
+<link rel="manifest" href="./manifest.json">
+<style>
+/* Layout: sticky header with filters, one column of spot cards; works fully offline */
+:root{
+  --bg:#f4f6f3; --surface:#ffffff; --fg:#17201d; --muted:#5d6b66; --line:#dce3df;
+  --accent:#16352f; --accent-fg:#ffffff; --chip:#e6ece9;
+  --red:#c4412b; --gold:#a87412; --teal:#24796a;
+  --font:-apple-system,"Hiragino Sans","Noto Sans JP","Apple SD Gothic Neo",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f1513; --surface:#18201e; --fg:#e6ece9; --muted:#97a6a0; --line:#2a3431;
+  --accent:#8fd3c1; --accent-fg:#0f1513; --chip:#222c29;
+  --red:#ff8a73; --gold:#e6b84e; --teal:#6cc4ad; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.55;-webkit-tap-highlight-color:transparent}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) max(14px,env(safe-area-inset-right,0px)) 10px max(14px,env(safe-area-inset-left,0px))}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+h1{margin:0;font-size:20px;font-weight:800;letter-spacing:.02em}
+.sub{font-size:12px;color:var(--muted)}
+.tabs{display:flex;gap:6px;margin-top:8px}
+.tab{flex:1;border:0;border-radius:10px;padding:8px 4px;font:inherit;font-size:13px;font-weight:700;background:var(--chip);color:var(--fg)}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--accent-fg)}
+.chips{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);border-radius:99px;padding:5px 12px;font:inherit;font-size:13px;background:var(--surface);color:var(--fg)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.row{display:flex;gap:6px;margin-top:8px}
+.row input,.row select{flex:1;min-width:0;font:inherit;font-size:14px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.row select{flex:0 0 auto}
+main{padding:12px max(14px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px;max-width:640px;margin:0 auto}
+.note{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--red);border-radius:10px;padding:10px 12px;font-size:13px}
+.note b{color:var(--red)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.head{display:flex;gap:8px;align-items:flex-start}
+.head .t{flex:1;min-width:0}
+.name{font-size:17px;font-weight:800;line-height:1.35}
+.ko{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.star{border:0;background:none;font-size:24px;line-height:1;padding:2px;color:var(--line);cursor:pointer}
+.star[aria-pressed="true"]{color:var(--gold)}
+.meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
+.b{border-radius:6px;padding:1px 7px;font-weight:700}
+.b.t0{background:var(--accent);color:var(--accent-fg)}
+.b.t1{background:var(--chip);color:var(--teal)}
+.b.t2{background:var(--chip);color:var(--gold)}
+.b.c{background:var(--chip);color:var(--fg);font-weight:500}
+.b.d{color:var(--muted);font-weight:500;padding-left:0}
+.eat{font-size:14px}
+.eat b{color:var(--red)}
+.tip{font-size:13px;color:var(--muted)}
+.acts{display:flex;gap:8px;margin-top:2px}
+.btn{flex:1;text-align:center;border:1px solid var(--line);border-radius:10px;padding:7px 4px;font:inherit;font-size:13px;color:var(--fg);background:var(--bg);text-decoration:none}
+.empty{text-align:center;color:var(--muted);padding:30px 0}
+.hcard{background:var(--surface);border:2px solid var(--accent);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
+.big{font-size:26px;font-weight:800;line-height:1.35;word-break:keep-all}
+.hcard .lbl{font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:7px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+td:first-child{color:var(--muted);white-space:nowrap;width:1%}
+.ph{display:flex;flex-direction:column;gap:2px;padding:8px 0;border-bottom:1px solid var(--line)}
+.ph .k{font-size:19px;font-weight:700}
+.ph .j{font-size:13px;color:var(--muted)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:99px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:1}
+.off{font-size:11px;color:var(--teal)}
+</style>
+</head>
+<body>
+<header>
+  <div class="top"><h1>ソウル食べ歩き帖</h1><span class="sub" id="cnt"></span></div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-v="list" aria-selected="true">スポット</button>
+    <button class="tab" role="tab" data-v="fav" aria-selected="false">★行きたい</button>
+    <button class="tab" role="tab" data-v="info" aria-selected="false">ホテル・便利</button>
+  </div>
+  <div id="filters">
+    <div class="chips" id="cats"></div>
+    <div class="row">
+      <input id="q" type="search" placeholder="検索（例：冷麺、夜、近い）">
+      <select id="sort" aria-label="並び順">
+        <option value="rec">おすすめ順</option>
+        <option value="hotel">ホテルから近い順</option>
+        <option value="here">現在地から近い順</option>
+      </select>
+    </div>
+    <div class="chips" id="tiers"></div>
+  </div>
+</header>
+<main id="main"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+const HOTEL={lat:37.5652,lng:127.0046};
+// tier: 0=定番 1=人気 2=穴場
+const S=[
+// ---- 市場・屋台 ----
+{n:"広蔵市場",k:"광장시장",c:"市場",t:0,a:"鍾路5街",lat:37.5700,lng:126.9996,e:"<b>ピンデトック</b>（緑豆チヂミ）、<b>麻薬キンパ</b>、ユッケ、スンデ、カルグクス",p:"ソウル最古級の市場。屋台の長椅子に座ってつまむのが定番。ユッケは市場横の「ユッケ通り」へ。日曜は休む店もある"},
+{n:"東大門タッカンマリ通り",k:"동대문 닭한마리골목",c:"名物",t:0,a:"東大門",lat:37.5708,lng:127.0057,e:"<b>タッカンマリ</b>（丸鶏の水炊き）→最後にカルグクス",p:"路地に専門店が並ぶ。老舗は「陳玉華ハルメ元祖タッカンマリ（진옥화할매원조닭한마리）」。3人なら1羽＋追加麺でちょうどいい"},
+{n:"長忠洞チョッパル通り",k:"장충동 족발거리",c:"名物",t:0,a:"長忠洞",lat:37.5600,lng:127.0065,e:"<b>チョッパル</b>（豚足の煮込み）、ポッサム",p:"ホテルから歩ける距離。半分（반）サイズもある。マッククス（冷たい蕎麦）と一緒に"},
+{n:"新堂洞トッポッキタウン",k:"신당동 떡볶이타운",c:"名物",t:1,a:"新堂",lat:37.5646,lng:127.0146,e:"<b>鍋トッポッキ</b>（チーズ・ラーメン麺・卵を追加）",p:"テーブルで煮込むタイプ。最後に焼き飯（볶음밥）を頼むのがお約束"},
+{n:"乙支路ノガリ路地",k:"을지로 노가리골목",c:"夜",t:1,a:"乙支路3街",lat:37.5663,lng:126.9915,e:"<b>ノガリ</b>（干しスケトウダラ）＋生ビール",p:"夕方から路上にテーブルが並ぶ、会社帰りの名所。安くて雰囲気が最高"},
+{n:"鍾路3街ポチャ通り",k:"종로3가 포장마차거리",c:"夜",t:1,a:"鍾路3街",lat:37.5714,lng:126.9921,e:"テント屋台で<b>焼き物・海鮮・ソジュ</b>",p:"日が暮れるとオレンジのテントが並ぶ。ドラマで見る屋台そのもの"},
+{n:"明洞屋台",k:"명동 노점",c:"市場",t:0,a:"明洞",lat:37.5636,lng:126.9850,e:"チーズハットグ、トルネードポテト、ロブスター焼き、いちご飴",p:"夕方〜夜に屋台が出る。観光地価格だが歩きながら食べ比べできる。両替所もここ"},
+{n:"南大門市場",k:"남대문시장",c:"市場",t:0,a:"南大門",lat:37.5591,lng:126.9775,e:"<b>太刀魚の煮付け</b>（갈치조림골목）、野菜ホットク、カルグクス路地",p:"ソウル駅から歩ける。太刀魚路地は一人用もあり辛さは店次第"},
+{n:"通仁市場",k:"통인시장",c:"市場",t:1,a:"西村",lat:37.5809,lng:126.9701,e:"<b>葉銭弁当</b>（古銭でおかずを選ぶ）、<b>油トッポッキ</b>",p:"景福宮の西側。弁当カフェで古銭を買って市場を回る。定休日があるので要確認"},
+{n:"望遠市場",k:"망원시장",c:"市場",t:1,a:"望遠",lat:37.5560,lng:126.9060,e:"コロッケ、タッカンジョン、手打ち麺、安いおかず",p:"地元の人の台所。物価が明洞の半分くらい。望遠漢江公園とセットで"},
+{n:"中部市場",k:"중부시장",c:"市場",t:2,a:"乙支路4街",lat:37.5667,lng:126.9937,e:"干物・干しダラ・海苔。<b>お土産の乾物</b>",p:"ホテルから徒歩圏の乾物市場。観光客は少なめで値段も地元価格"},
+{n:"京東市場",k:"경동시장",c:"市場",t:2,a:"祭基洞",lat:37.5797,lng:127.0390,e:"漢方・食材。市場の中の<b>スタバ「京東1960」</b>",p:"古い映画館をそのまま使ったスターバックスが話題。市場の熱気がすごい"},
+{n:"鷺梁津水産市場",k:"노량진수산시장",c:"市場",t:1,a:"鷺梁津",lat:37.5132,lng:126.9406,e:"<b>刺身・カニ・活きダコ</b>を選んで上の食堂で調理",p:"1階で魚を買い、2階の食堂へ持ち込む方式。値段交渉の雰囲気も楽しい"},
+{n:"馬場洞畜産市場",k:"마장동 축산물시장",c:"市場",t:2,a:"馬場洞",lat:37.5660,lng:127.0430,e:"<b>韓牛</b>を市場価格で買い、併設食堂で焼く",p:"ソウル最大の食肉市場。韓牛を安く食べたいならここ"},
+{n:"往十里ホルモン通り",k:"왕십리 곱창골목",c:"名物",t:2,a:"往十里",lat:37.5610,lng:127.0360,e:"<b>コプチャン</b>（ホルモン）焼き、ソジュ",p:"ローカル色が強い。日本語メニューはほぼないので写真で注文"},
+{n:"新林洞スンデタウン",k:"신림동 순대타운",c:"名物",t:2,a:"新林",lat:37.4840,lng:126.9290,e:"<b>ペクスンデ</b>（スンデと野菜の鉄板炒め）",p:"ビル1棟がまるごとスンデ屋。学生街で量が多く安い"},
+// ---- 名店・名物 ----
+{n:"明洞餃子",k:"명동교자",c:"名物",t:0,a:"明洞",lat:37.5627,lng:126.9858,e:"<b>カルグクス</b>（ニンニク強めのキムチと）、マンドゥ",p:"回転が速く並んでもすぐ入れる。麺と汁はおかわり無料"},
+{n:"下東館",k:"하동관",c:"名物",t:1,a:"明洞",lat:37.5636,lng:126.9842,e:"<b>コムタン</b>（牛骨と肉のスープ）",p:"1939年創業。朝から営業し、売り切れたら閉店。朝ごはんに"},
+{n:"武橋洞プゴクッチッ",k:"무교동 북어국집",c:"名物",t:1,a:"市庁",lat:37.5675,lng:126.9795,e:"<b>プゴクッ</b>（干しダラのスープ）一品のみ",p:"メニューは1つだけ、座れば出てくる。二日酔いの朝に最高"},
+{n:"又来屋",k:"우래옥",c:"名物",t:1,a:"乙支路4街",lat:37.5682,lng:126.9985,e:"<b>平壌冷麺</b>、プルコギ",p:"1946年創業の老舗。ホテルから歩ける。あっさり系の冷麺の代表。月曜休みのことがあるので要確認"},
+{n:"筆洞麺屋",k:"필동면옥",c:"名物",t:2,a:"忠武路",lat:37.5605,lng:126.9950,e:"<b>平壌冷麺</b>、スユク",p:"冷麺好きに有名な店。スープが薄いと感じたら酢と辛子で"},
+{n:"土俗村参鶏湯",k:"토속촌 삼계탕",c:"名物",t:0,a:"景福宮",lat:37.5779,lng:126.9713,e:"<b>参鶏湯</b>",p:"景福宮観光とセットで。昼は行列するが回転は速い"},
+{n:"ロンドンベーグルミュージアム 安国",k:"런던베이글뮤지엄 안국",c:"カフェ",t:1,a:"安国",lat:37.5790,lng:126.9860,e:"ベーグル各種、スープ",p:"大行列の人気店。朝イチか、待ち時間を受付で確認して近くを散歩"},
+{n:"東廟の蚤の市",k:"동묘 벼룩시장",c:"穴場",t:2,a:"東廟",lat:37.5730,lng:127.0160,e:"古着・骨董。路地の<b>屋台スナック</b>",p:"週末に地元のおじさんと古着好きで賑わう。ホテルから近い"},
+// ---- エリア ----
+{n:"益善洞韓屋通り",k:"익선동 한옥거리",c:"エリア",t:0,a:"鍾路3街",lat:37.5745,lng:126.9895,e:"韓屋を改装したカフェ・レストラン、スイーツ",p:"細い路地に韓屋が密集。昼はカフェ、夜は鍾路3街の屋台へ流れる"},
+{n:"聖水洞",k:"성수동",c:"エリア",t:1,a:"聖水",lat:37.5445,lng:127.0560,e:"倉庫カフェ、ベーカリー、ポップアップストア",p:"ソウルの今を見るならここ。工場を改装した店が多い。週末は混む"},
+{n:"延南洞・京義線森の道",k:"연남동 경의선숲길",c:"エリア",t:1,a:"弘大",lat:37.5622,lng:126.9236,e:"カフェ、ブランチ、中華（延南洞の老舗中華も多い）",p:"線路跡の公園沿いに小さな店が並ぶ。弘大の喧騒より落ち着いている"},
+{n:"乙支路（ヒップジロ）",k:"을지로 힙지로",c:"エリア",t:2,a:"乙支路3街",lat:37.5660,lng:126.9920,e:"印刷所の上に隠れたバー・カフェ",p:"看板がない店が多く、古いビルの階段を上がると突然おしゃれな店がある"},
+{n:"新堂洞（ヒップダン）",k:"신당동 힙당동",c:"エリア",t:2,a:"新堂",lat:37.5655,lng:127.0175,e:"中央市場まわりの新しいバー・飲み屋",p:"市場の中や裏路地に若い店が増えている。ホテルから歩ける夜の穴場"},
+{n:"西村",k:"서촌",c:"エリア",t:2,a:"景福宮西",lat:37.5790,lng:126.9690,e:"小さな食堂、古本屋、カフェ",p:"北村より静かで地元感がある韓屋の街。通仁市場とセットで"},
+{n:"解放村",k:"해방촌",c:"エリア",t:2,a:"南山下",lat:37.5430,lng:126.9860,e:"屋上バー、多国籍料理",p:"南山の斜面の街。屋上からNソウルタワーが近くに見える"},
+{n:"文来洞",k:"문래동",c:"エリア",t:2,a:"文来",lat:37.5150,lng:126.8950,e:"鉄工所の間にあるカフェ・ビストロ",p:"昼は金属を削る音、夜は小さなバーが灯る不思議な街"},
+{n:"仁寺洞・サムジギル",k:"인사동 쌈지길",c:"エリア",t:0,a:"仁寺洞",lat:37.5740,lng:126.9850,e:"伝統菓子、韓国茶、<b>ホットク</b>",p:"お土産探しに。サムジギルはらせん状に上る小さな店の集まり"},
+// ---- 観光 ----
+{n:"景福宮",k:"경복궁",c:"観光",t:0,a:"光化門",lat:37.5796,lng:126.9770,e:"周辺で<b>参鶏湯</b>（土俗村）",p:"韓服を着ていると入場無料。守門将交代式あり。火曜休み"},
+{n:"昌徳宮",k:"창덕궁",c:"観光",t:0,a:"安国",lat:37.5794,lng:126.9910,e:"帰りに益善洞でカフェ",p:"世界遺産。月曜休みなので行くなら日曜まで"},
+{n:"北村韓屋村",k:"북촌 한옥마을",c:"観光",t:0,a:"安国",lat:37.5826,lng:126.9830,e:"周辺のカフェ",p:"人が住んでいる街なので静かに。夕方以降は観光客の立ち入りを制限している区域がある"},
+{n:"清渓川",k:"청계천",c:"観光",t:0,a:"鍾路",lat:37.5694,lng:126.9870,e:"散歩しながら広蔵市場へ",p:"ホテルから歩いて10分。夜は橋がライトアップされる"},
+{n:"東大門デザインプラザ（DDP）",k:"동대문디자인플라자",c:"観光",t:0,a:"東大門",lat:37.5665,lng:127.0092,e:"夜の東大門ファッションビル巡り",p:"ホテルのすぐ隣。夜のライトアップが綺麗"},
+{n:"世運商街の屋上",k:"세운상가 옥상",c:"穴場",t:2,a:"鍾路",lat:37.5695,lng:126.9950,e:"レトロな電子部品街",p:"屋上デッキから宗廟と鍾路が見渡せる無料の展望スポット。電子部品好きは楽しい"},
+{n:"駱山公園・梨花洞壁画村",k:"낙산공원 이화동 벽화마을",c:"夜",t:2,a:"恵化",lat:37.5803,lng:127.0074,e:"大学路で夕食",p:"城壁沿いの夜景が穴場。東大門から坂を上って歩ける"},
+{n:"Nソウルタワー",k:"N서울타워",c:"夜",t:0,a:"南山",lat:37.5512,lng:126.9882,e:"南山トンカツ（남산돈까스）",p:"ケーブルカーか南山循環バスで。麓の南山トンカツ通りも名物"},
+{n:"汝矣島漢江公園",k:"여의도한강공원",c:"夜",t:1,a:"汝矣島",lat:37.5284,lng:126.9330,e:"<b>デリバリーチキン＋ビール</b>、コンビニの漢江ラーメン",p:"芝生でチキンを食べるのがソウル流。コンビニのラーメン機で作る即席麺も名物"},
+{n:"ザ・現代ソウル",k:"더현대 서울",c:"観光",t:1,a:"汝矣島",lat:37.5259,lng:126.9284,e:"地下の<b>フードホール</b>",p:"巨大な吹き抜けのデパート。雨の日の避難先にも"},
+{n:"ロッテワールドタワー ソウルスカイ",k:"롯데월드타워 서울스카이",c:"夜",t:1,a:"蚕室",lat:37.5126,lng:127.1025,e:"ロッテ百貨店のデパ地下",p:"韓国一高いビルの展望台。夕暮れ時が一番綺麗"},
+];
+const CATS=["すべて","市場","名物","夜","エリア","観光","カフェ","穴場"];
+const TIERS=["定番","人気","穴場"];
+const $=s=>document.querySelector(s);
+let st={v:"list",cat:"すべて",tiers:new Set([0,1,2]),q:"",sort:"rec",here:null};
+let fav=new Set();
+try{fav=new Set(JSON.parse(localStorage.getItem("seoul-fav")||"[]"))}catch(e){}
+const saveFav=()=>{try{localStorage.setItem("seoul-fav",JSON.stringify([...fav]))}catch(e){}};
+function km(a,b){const R=6371,r=x=>x*Math.PI/180;const dLa=r(b.lat-a.lat),dLo=r(b.lng-a.lng);
+  const h=Math.sin(dLa/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function fmt(d){return d<1.5?`徒歩${Math.max(1,Math.round(d*1.3/0.075))}分`:`${d.toFixed(1)}km`}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(t._);t._=setTimeout(()=>t.classList.remove("on"),1500)}
+function copy(txt){
+  const done=()=>toast("コピーしました："+txt);
+  if(navigator.clipboard)navigator.clipboard.writeText(txt).then(done,()=>fallback(txt));else fallback(txt);
+  function fallback(x){const ta=document.createElement("textarea");ta.value=x;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");done()}catch(e){}ta.remove()}
+}
+function chips(){
+  $("#cats").innerHTML=CATS.map(c=>`<button class="chip" data-c="${c}" aria-pressed="${st.cat===c}">${c}</button>`).join("");
+  $("#tiers").innerHTML=TIERS.map((t,i)=>`<button class="chip" data-t="${i}" aria-pressed="${st.tiers.has(i)}">${t}</button>`).join("");
+}
+function card(s,i){
+  const dh=km(HOTEL,s), dn=st.here?km(st.here,s):null;
+  const nav=`https://map.naver.com/p/search/${encodeURIComponent(s.k)}`;
+  return `<article class="card">
+   <div class="head"><div class="t"><div class="name">${s.n}</div>
+     <div class="ko">${s.k}</div></div>
+     <button class="star" data-f="${s.k}" aria-pressed="${fav.has(s.k)}" aria-label="行きたい">★</button></div>
+   <div class="meta"><span class="b t${s.t}">${TIERS[s.t]}</span><span class="b c">${s.c}</span><span class="b c">${s.a}</span>
+     <span class="b d">ホテルから${fmt(dh)}${dn!=null?` ・ 現在地から${fmt(dn)}`:""}</span></div>
+   <div class="eat">🍴 ${s.e}</div>
+   <div class="tip">${s.p}</div>
+   <div class="acts"><button class="btn" data-copy="${s.k}">ハングルをコピー</button><a class="btn" href="${nav}" target="_blank" rel="noopener">NAVER地図で開く</a></div>
+  </article>`;
+}
+function list(onlyFav){
+  let a=S.filter(s=>{
+    if(onlyFav)return fav.has(s.k);
+    if(st.cat!=="すべて"&&s.c!==st.cat&&!(st.cat==="穴場"&&s.t===2))return false;
+    if(!st.tiers.has(s.t))return false;
+    if(st.q){const q=st.q.toLowerCase();if(q==="近い")return km(HOTEL,s)<1.5;
+      if(!(s.n+s.k+s.a+s.e+s.p+s.c).toLowerCase().includes(q))return false}
+    return true});
+  if(st.sort==="hotel")a.sort((x,y)=>km(HOTEL,x)-km(HOTEL,y));
+  if(st.sort==="here"&&st.here)a.sort((x,y)=>km(st.here,x)-km(st.here,y));
+  return a;
+}
+const halloween=`<div class="note"><b>10/31（土）夜の注意</b>：ハロウィンの夜は梨泰院・弘大に人が集中します。混雑した路地には入らず、警察の誘導に従ってください。緊急時は <b>112</b>（警察）・<b>119</b>（救急）。</div>`;
+function info(){
+  return `<div class="hcard"><div class="lbl">タクシーではこの画面を見せる</div>
+   <div class="big">현대레지던스<br>서울특별시 중구 마른내로12길 7-4</div>
+   <div>여기로 가 주세요（ここに行ってください）</div>
+   <div class="acts"><button class="btn" data-copy="서울특별시 중구 마른내로12길 7-4">住所をコピー</button><button class="btn" data-copy="02-3406-8000">電話 02-3406-8000</button></div></div>
+  <div class="card"><div class="name">ホテル</div><table>
+   <tr><td>名前</td><td>現代レジデンス（Hyundai Residence）</td></tr>
+   <tr><td>最寄り</td><td>東大門歴史文化公園駅 6番出口 徒歩5分／乙支路4街駅 8番出口 徒歩6分</td></tr>
+   <tr><td>日程</td><td>10/31(土)〜11/2(月)</td></tr></table></div>
+  <div class="card"><div class="name">フライト</div><table>
+   <tr><td>往路</td><td>LJ212 10/31 11:10 成田T1 → 13:50 仁川T2</td></tr>
+   <tr><td>復路</td><td>LJ271 11/2 17:05 仁川T2 → 19:25 成田T1</td></tr>
+   <tr><td>空港へ</td><td>ソウル駅から空港鉄道 普通約66分。出発3時間前には動く</td></tr></table></div>
+  ${halloween}
+  <div class="card"><div class="name">困ったとき</div><table>
+   <tr><td>警察</td><td>112</td></tr><tr><td>救急・消防</td><td>119</td></tr>
+   <tr><td>観光案内</td><td>1330（日本語対応）</td></tr></table></div>
+  <div class="card"><div class="name">お店で使うひとこと</div>
+   ${[["이거 주세요","これください（指さしながら）"],["덜 맵게 해 주세요","辛さ控えめにしてください"],["몇 인분이에요?","何人前ですか？"],["포장해 주세요","持ち帰りにしてください"],["계산해 주세요","お会計お願いします"],["카드 돼요?","カード使えますか？"],["화장실 어디예요?","トイレどこですか？"],["맛있어요!","おいしいです！"]]
+    .map(([k,j])=>`<div class="ph"><span class="k">${k}</span><span class="j">${j}</span></div>`).join("")}
+  </div>
+  <p class="off" id="offline"></p>`;
+}
+function render(){
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===st.v));
+  $("#filters").hidden=st.v!=="list";
+  const m=$("#main");
+  if(st.v==="info"){m.innerHTML=info();$("#cnt").textContent="";offlineState();return}
+  const a=list(st.v==="fav");
+  $("#cnt").textContent=`${a.length}件`;
+  m.innerHTML=(st.v==="list"?halloween:"")+(a.length?a.map(card).join(""):
+    `<div class="empty">${st.v==="fav"?"★を押したスポットがここに集まります":"条件に合うスポットがありません"}</div>`);
+}
+function offlineState(){
+  const el=$("#offline");if(!el)return;
+  el.textContent=("serviceWorker" in navigator&&navigator.serviceWorker.controller)?"✓ オフラインでも見られる状態です":"一度ネットに繋いだ状態で開くとオフライン対応になります";
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button");if(!t)return;
+  if(t.dataset.v){st.v=t.dataset.v;render();scrollTo(0,0)}
+  else if(t.dataset.c){st.cat=t.dataset.c;chips();render()}
+  else if(t.dataset.t){const i=+t.dataset.t;st.tiers.has(i)?st.tiers.delete(i):st.tiers.add(i);if(!st.tiers.size)st.tiers.add(i);chips();render()}
+  else if(t.dataset.f){const k=t.dataset.f;fav.has(k)?fav.delete(k):fav.add(k);saveFav();t.setAttribute("aria-pressed",fav.has(k));if(st.v==="fav")render()}
+  else if(t.dataset.copy)copy(t.dataset.copy);
+});
+$("#q").addEventListener("input",e=>{st.q=e.target.value.trim();render()});
+$("#sort").addEventListener("change",e=>{
+  st.sort=e.target.value;
+  if(st.sort==="here"){
+    if(!navigator.geolocation){toast("現在地が使えません");return}
+    toast("現在地を取得中…");
+    navigator.geolocation.getCurrentPosition(p=>{st.here={lat:p.coords.latitude,lng:p.coords.longitude};render();toast("現在地から近い順にしました")},
+      ()=>{toast("現在地を取得できませんでした");st.sort="hotel";e.target.value="hotel";render()},{enableHighAccuracy:false,timeout:10000});
+  }else render();
+});
+chips();render();
+if("serviceWorker" in navigator){navigator.serviceWorker.register("./sw.js").then(()=>navigator.serviceWorker.ready).then(offlineState).catch(()=>{})}
+</script>
+</body>
+</html>
