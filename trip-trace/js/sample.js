@@ -146,11 +146,30 @@ function paint(scene, hour, i, W, H) {
   g.fillStyle = 'rgba(255,255,255,0.55)';
   g.font = `600 ${Math.round(22 * u)}px "Avenir Next", "Josefin Sans", sans-serif`;
   g.fillText('SAMPLE', 34 * u, H - 30 * u);
-  // a little film grain
-  const grain = g.getImageData(0, 0, W, H), d = grain.data;
-  for (let k = 0; k < d.length; k += 4) { const n = (R() - 0.5) * 14; d[k] += n; d[k + 1] += n; d[k + 2] += n; }
-  g.putImageData(grain, 0, 0);
-  return new Promise(r => c.toBlob(r, 'image/jpeg', 0.86));
+  g.globalAlpha = 0.07;
+  g.fillStyle = g.createPattern(grainTile(), 'repeat');
+  g.fillRect(0, 0, W, H);
+  g.globalAlpha = 1;
+  return c;
+}
+
+let grain = null;
+function grainTile() {
+  if (grain) return grain;
+  grain = document.createElement('canvas');
+  grain.width = grain.height = 128;
+  const g = grain.getContext('2d');
+  const img = g.createImageData(128, 128);
+  for (let k = 0; k < img.data.length; k += 4) { const v = Math.random() * 255; img.data[k] = img.data[k + 1] = img.data[k + 2] = v; img.data[k + 3] = 255; }
+  g.putImageData(img, 0, 0);
+  return grain;
+}
+
+function toBlob(src, w, h, q) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(src, 0, 0, w, h);
+  return new Promise(r => c.toBlob(r, 'image/jpeg', q));
 }
 
 export async function createSample(onProgress) {
@@ -165,9 +184,10 @@ export async function createSample(onProgress) {
     const time = Date.parse(`${date}T${t}:00+09:00`);
     const hour = Number(t.slice(0, 2)) + Number(t.slice(3)) / 60;
     const portrait = ['lantern', 'steps', 'buddha2', 'hydrangea', 'lighthouse', 'torii'].includes(scene);
-    const [W, H] = portrait ? [1080, 1440] : [1440, 1080];
-    const full = await paint(scene, hour, i, W, H);
-    const thumb = await paint(scene, hour, i, Math.round(W / 3), Math.round(H / 3));
+    const [W, H] = portrait ? [960, 1280] : [1280, 960];
+    const canvas = paint(scene, hour, i, W, H);
+    const full = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.86));
+    const thumb = await toBlob(canvas, Math.round(W / 3), Math.round(H / 3), 0.78);
     photos.push({ id: `${trip.id}:s${String(i).padStart(2, '0')}`, tripId: trip.id, name: `${scene}.jpg`, time, off: '+09:00', lat, lon, acc: lat != null ? 10 : null, w: W, h: H, full, thumb });
     onProgress?.((i + 1) / SHOTS.length, thumb);
   }

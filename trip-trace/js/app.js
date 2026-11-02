@@ -101,6 +101,7 @@ async function boot() {
   });
 
   library.open();
+  if (/[?&]debug\b/.test(location.search)) window.__tt = { E, M, model, cinema };
 }
 
 boot().catch(err => {

@@ -280,14 +280,37 @@ export function camera() {
   return { center: [c.lng, c.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
 }
 
-/** Camera that fits bounds [[w,s],[e,n]] with the given padding, at a pitch and bearing. */
+/**
+ * Camera that fits bounds [[w,s],[e,n]] inside the screen minus padding, at a pitch and bearing.
+ * Computed in Web Mercator so it is right at any zoom (MapLibre's own fit can be off while the globe is shown).
+ * The returned centre already accounts for the padding, so use it without padding.
+ */
 export function frame(b, { padding = 40, pitch = 0, bearing = 0, maxZoom = 16 } = {}) {
   const pad = typeof padding === 'number' ? { top: padding, bottom: padding, left: padding, right: padding } : padding;
-  const c = map.cameraForBounds(b, { padding: pad, maxZoom, bearing });
-  if (!c) return null;
-  const ll = c.center.toArray ? c.center.toArray() : [c.center.lng, c.center.lat];
-  // A tilted camera sees further, so pull back a little to keep everything in view.
-  return { center: ll, zoom: clamp(c.zoom - pitch / 150, 0.8, maxZoom), pitch, bearing };
+  const el = map.getContainer();
+  const W = el.clientWidth || 390, H = el.clientHeight || 844;
+  const availW = Math.max(60, W - pad.left - pad.right), availH = Math.max(60, H - pad.top - pad.bottom);
+  const MC = maplibregl.MercatorCoordinate;
+  const [[w, s], [e, n]] = b;
+  const corners = [[w, s], [e, s], [e, n], [w, n]].map(([lng, lat]) => MC.fromLngLat([lng, clamp(lat, -84, 84)]));
+  const cx = (corners[0].x + corners[2].x) / 2, cy = (corners[0].y + corners[2].y) / 2;
+  const br = bearing * Math.PI / 180, cos = Math.cos(br), sin = Math.sin(br);
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const c of corners) {
+    const dx = c.x - cx, dy = c.y - cy;
+    const sx = dx * cos + dy * sin, sy = -dx * sin + dy * cos;
+    x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
+  }
+  const tilt = Math.max(Math.cos(pitch * Math.PI / 180), 0.4);
+  const spanX = Math.max(x1 - x0, 1e-9), spanY = Math.max(y1 - y0, 1e-9);
+  let zoom = Math.log2(Math.min(availW / (512 * spanX), availH / (512 * spanY * tilt)));
+  zoom = clamp(zoom - pitch / 160, 0.6, maxZoom);
+  const scale = 512 * 2 ** zoom;
+  const offX = (pad.left - pad.right) / 2, offY = (pad.top - pad.bottom) / 2;
+  const sx = -offX / scale, sy = -offY / scale / tilt;
+  const mx = cx + sx * cos - sy * sin, my = cy + sx * sin + sy * cos;
+  const ll = new MC(((mx % 1) + 1) % 1, clamp(my, 0.0001, 0.9999)).toLngLat();
+  return { center: [ll.lng, ll.lat], zoom, pitch, bearing };
 }
 
 export function fly(cam, { duration = 2400, curve = 1.42, padding } = {}) {
