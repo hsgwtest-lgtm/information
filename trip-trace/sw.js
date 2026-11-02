@@ -1,16 +1,16 @@
 // Trip Trace service worker.
-// App files: network first (updates show up right away), cached for offline use.
-// Libraries: cache first. Map tiles and APIs are never intercepted.
-const VERSION = 'trip-trace-v2.0.0';
+// App files: network first, so updates arrive right away; cached copies keep it opening offline.
+// Libraries and fonts: cache first. Map tiles and lookups go straight to the network (the browser caches them).
+const VERSION = 'trip-trace-cinema-1';
 const SHELL = [
-  './', './index.html', './manifest.json', './css/app.css', './icons/icon.svg',
-  './js/main.js', './js/analyze.js', './js/db.js', './js/fmt.js', './js/geo.js', './js/importer.js', './js/legs.js',
-  './js/library.js', './js/mapview.js', './js/replay.js', './js/sample.js', './js/services.js', './js/trips.js',
-  './js/tripview.js', './js/ui.js',
+  './', './index.html', './manifest.json', './css/app.css', './icons/icon.svg', './icons/icon-192.png',
+  './js/app.js', './js/analyze.js', './js/cinema.js', './js/db.js', './js/editor.js', './js/engine.js', './js/exif.js',
+  './js/fmt.js', './js/geo.js', './js/icons.js', './js/importflow.js', './js/library.js', './js/model.js', './js/net.js',
+  './js/paths.js', './js/sample.js', './js/tripview.js', './js/ui.js',
 ];
 const LIBS = [
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+  'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js',
+  'https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css',
   'https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js',
 ];
 
@@ -30,10 +30,10 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (LIBS.includes(req.url)) {
+  const isLib = LIBS.includes(req.url) || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+  if (isLib) {
     e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(VERSION).then(c => c.put(req, copy));
+      if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
       return res;
     })));
     return;

@@ -1,69 +1,42 @@
-// Small UI toolkit: toast, dialogs, action sheets, full-screen panels, progress, object URLs.
+// Small UI pieces: toast, dialogs, object URLs.
 import { esc } from './fmt.js';
 
-const layer = document.getElementById('layer');
+const layer = () => document.getElementById('overlay');
 
 let toastTimer = 0;
-export function toast(msg, ms = 3200) {
+export function toast(text, { action, onAction, ms = 3400 } = {}) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  el.innerHTML = `<span>${esc(text)}</span>${action ? `<button type="button">${esc(action)}</button>` : ''}`;
   el.hidden = false;
-  el.classList.remove('show');
+  el.classList.remove('on');
   void el.offsetWidth;
-  el.classList.add('show');
+  el.classList.add('on');
+  if (action) el.querySelector('button').onclick = () => { hide(); onAction?.(); };
+  const hide = () => { el.classList.remove('on'); setTimeout(() => { el.hidden = true; }, 300); };
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.classList.remove('show'); setTimeout(() => { el.hidden = true; }, 250); }, ms);
+  toastTimer = setTimeout(hide, ms);
 }
 
-function mount(html, cls) {
-  const wrap = document.createElement('div');
-  wrap.className = `ov ${cls}`;
-  wrap.innerHTML = html;
-  layer.appendChild(wrap);
-  requestAnimationFrame(() => wrap.classList.add('in'));
-  const close = () => {
-    wrap.classList.remove('in');
-    setTimeout(() => wrap.remove(), 220);
-  };
-  return { el: wrap, close };
+function mount(html) {
+  const el = document.createElement('div');
+  el.className = 'dlg-wrap';
+  el.innerHTML = `<div class="dlg-scrim"></div>${html}`;
+  layer().appendChild(el);
+  requestAnimationFrame(() => el.classList.add('in'));
+  return { el, close: () => { el.classList.remove('in'); setTimeout(() => el.remove(), 260); } };
 }
 
-/** Bottom action sheet. options: [{label, value, sub?, danger?, checked?}]. Resolves with value or null. */
-export function actionSheet({ title, message, options }) {
+export function confirm({ title, body = '', ok = 'OK', danger = false }) {
   return new Promise(resolve => {
     const { el, close } = mount(`
-      <div class="ov-scrim" data-x></div>
-      <div class="as" role="dialog" aria-label="${esc(title || 'メニュー')}">
-        ${title ? `<div class="as-title">${esc(title)}</div>` : ''}
-        ${message ? `<div class="as-msg">${esc(message)}</div>` : ''}
-        <div class="as-list">${options.map((o, i) => `
-          <button type="button" class="as-opt${o.danger ? ' danger' : ''}${o.checked ? ' checked' : ''}" data-i="${i}">
-            <span class="as-label">${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ''}</span>
-            ${o.checked ? '<span class="as-check" aria-hidden="true">✓</span>' : ''}
-          </button>`).join('')}
+      <div class="dlg" role="alertdialog" aria-labelledby="dlgT">
+        <h2 id="dlgT" class="dlg-title">${esc(title)}</h2>
+        ${body ? `<p class="dlg-body">${esc(body)}</p>` : ''}
+        <div class="dlg-row">
+          <button type="button" class="btn quiet" data-v="0">キャンセル</button>
+          <button type="button" class="btn ${danger ? 'danger' : 'gold'}" data-v="1">${esc(ok)}</button>
         </div>
-        <button type="button" class="as-cancel" data-x>キャンセル</button>
-      </div>`, 'ov-sheet');
-    el.addEventListener('click', e => {
-      const opt = e.target.closest('[data-i]');
-      if (opt) { close(); resolve(options[Number(opt.dataset.i)].value); return; }
-      if (e.target.closest('[data-x]')) { close(); resolve(null); }
-    });
-  });
-}
-
-export function confirmDialog({ title, message, ok = 'OK', danger = false }) {
-  return new Promise(resolve => {
-    const { el, close } = mount(`
-      <div class="ov-scrim"></div>
-      <div class="dlg" role="alertdialog" aria-label="${esc(title)}">
-        <div class="dlg-title">${esc(title)}</div>
-        ${message ? `<div class="dlg-msg">${esc(message)}</div>` : ''}
-        <div class="dlg-btns">
-          <button type="button" class="btn ghost" data-v="0">キャンセル</button>
-          <button type="button" class="btn ${danger ? 'danger' : 'primary'}" data-v="1">${esc(ok)}</button>
-        </div>
-      </div>`, 'ov-dialog');
+      </div>`);
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-v]');
       if (b) { close(); resolve(b.dataset.v === '1'); }
@@ -71,71 +44,63 @@ export function confirmDialog({ title, message, ok = 'OK', danger = false }) {
   });
 }
 
-export function promptDialog({ title, value = '', placeholder = '', ok = '保存' }) {
+export function prompt({ title, value = '', placeholder = '', ok = '保存' }) {
   return new Promise(resolve => {
     const { el, close } = mount(`
-      <div class="ov-scrim"></div>
-      <form class="dlg" role="dialog" aria-label="${esc(title)}">
-        <label class="dlg-title" for="dlgInput">${esc(title)}</label>
-        <input id="dlgInput" class="dlg-input" type="text" value="${esc(value)}" placeholder="${esc(placeholder)}" maxlength="60" autocomplete="off">
-        <div class="dlg-btns">
-          <button type="button" class="btn ghost" data-v="0">キャンセル</button>
-          <button type="submit" class="btn primary">${esc(ok)}</button>
+      <form class="dlg" role="dialog" aria-labelledby="dlgT">
+        <label id="dlgT" class="dlg-title" for="dlgIn">${esc(title)}</label>
+        <input id="dlgIn" class="dlg-input" type="text" maxlength="48" autocomplete="off" value="${esc(value)}" placeholder="${esc(placeholder)}">
+        <div class="dlg-row">
+          <button type="button" class="btn quiet" data-v="0">キャンセル</button>
+          <button type="submit" class="btn gold">${esc(ok)}</button>
         </div>
-      </form>`, 'ov-dialog');
+      </form>`);
     const input = el.querySelector('input');
-    setTimeout(() => { input.focus(); input.select(); }, 60);
+    setTimeout(() => { input.focus(); input.select(); }, 80);
     el.querySelector('form').addEventListener('submit', e => { e.preventDefault(); close(); resolve(input.value.trim()); });
     el.querySelector('[data-v="0"]').addEventListener('click', () => { close(); resolve(null); });
   });
 }
 
-/** Full-screen panel. Returns {el, body, close}. */
-export function openPanel({ title, sub = '', actionsHtml = '', onClose }) {
-  const { el, close } = mount(`
-    <div class="panel" role="dialog" aria-label="${esc(title)}">
-      <header class="panel-head">
-        <button type="button" class="icon-btn" data-close aria-label="閉じる"><span aria-hidden="true">‹</span></button>
-        <div class="panel-titles"><div class="panel-title">${esc(title)}</div><div class="panel-sub">${esc(sub)}</div></div>
-        <div class="panel-actions">${actionsHtml}</div>
-      </header>
-      <div class="panel-body"></div>
-    </div>`, 'ov-panel');
-  const doClose = () => { close(); onClose?.(); };
-  el.querySelector('[data-close]').addEventListener('click', doClose);
-  return {
-    el, body: el.querySelector('.panel-body'), close: doClose,
-    setTitle(t, s) { el.querySelector('.panel-title').textContent = t; if (s != null) el.querySelector('.panel-sub').textContent = s; },
-  };
-}
-
-let prog = null;
-export function progress(text, frac = null, thumb = null) {
-  if (text == null) { prog?.close(); prog = null; return; }
-  if (!prog) {
-    prog = mount(`
-      <div class="ov-scrim solid"></div>
-      <div class="prog" role="status">
-        <div class="prog-thumb"></div>
-        <div class="prog-text"></div>
-        <div class="prog-bar"><i></i></div>
-      </div>`, 'ov-progress');
-  }
-  prog.el.querySelector('.prog-text').textContent = text;
-  prog.el.querySelector('.prog-bar').hidden = frac == null;
-  prog.el.querySelector('.prog-bar i').style.width = `${Math.round((frac || 0) * 100)}%`;
-  const th = prog.el.querySelector('.prog-thumb');
-  th.style.backgroundImage = thumb ? `url("${thumb}")` : '';
-  th.hidden = !thumb;
+/** A short list of choices. options: [{label, value, danger?}] → resolves with value or null. */
+export function choose({ title, options }) {
+  return new Promise(resolve => {
+    const { el, close } = mount(`
+      <div class="dlg" role="dialog" aria-labelledby="dlgT">
+        <h2 id="dlgT" class="dlg-title">${esc(title)}</h2>
+        ${options.map((o, i) => `<button type="button" class="btn ${o.danger ? 'quiet danger-text' : ''}" data-i="${i}">${esc(o.label)}</button>`).join('')}
+        <button type="button" class="btn quiet" data-x>キャンセル</button>
+      </div>`);
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-i]');
+      if (b) { close(); resolve(options[Number(b.dataset.i)].value); return; }
+      if (e.target.closest('[data-x]') || e.target.classList.contains('dlg-scrim')) { close(); resolve(null); }
+    });
+  });
 }
 
 const urls = new Map();
-export function urlOf(blob) {
+export function url(blob) {
   if (!blob) return '';
   let u = urls.get(blob);
   if (!u) { u = URL.createObjectURL(blob); urls.set(blob, u); }
   return u;
 }
-export function revokeUrls(keep = new Set()) {
-  for (const [b, u] of urls) if (!keep.has(b)) { URL.revokeObjectURL(u); urls.delete(b); }
+export function releaseUrls(keep = []) {
+  const k = new Set(keep);
+  for (const [b, u] of urls) if (!k.has(b)) { URL.revokeObjectURL(u); urls.delete(b); }
 }
+
+/** Fade a screen in/out. */
+export function show(el, on) {
+  if (on) {
+    el.hidden = false;
+    requestAnimationFrame(() => el.classList.add('in'));
+  } else {
+    el.classList.remove('in');
+    setTimeout(() => { if (!el.classList.contains('in')) el.hidden = true; }, 420);
+  }
+}
+
+export const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+export const sleep = ms => new Promise(r => setTimeout(r, ms));

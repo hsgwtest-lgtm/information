@@ -1,58 +1,60 @@
-// IndexedDB storage. Everything stays on this device.
-//   trips:  {id, title, titleAuto, createdAt, updatedAt, cover (Blob), stats, highlightCount, spotRadiusM,
-//            mapStyle, modes, exclusions, stars, spotNames, placeCache}
-//   photos: {id, tripId, name, time, off, lat, lon, acc, w, h, full (Blob), thumb (Blob)}
-//   kv:     cache for routes and place lookups
-const NAME = 'trip-trace-v2';
-let dbPromise = null;
+// IndexedDB. Everything stays on this device.
+//   trips:  trip records (title, settings, edits, stats, cover Blob)
+//   photos: {id, tripId, name, time, off, lat, lon, acc, w, h, full: Blob, thumb: Blob}
+//   media:  per-trip background music {name, blob}
+//   cache:  route / place lookups
+const NAME = 'trip-trace-cinema';
+let opening = null;
 
 function open() {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve, reject) => {
+  if (opening) return opening;
+  opening = new Promise((resolve, reject) => {
     const req = indexedDB.open(NAME, 1);
     req.onupgradeneeded = () => {
       const db = req.result;
       db.createObjectStore('trips', { keyPath: 'id' });
       db.createObjectStore('photos', { keyPath: 'id' }).createIndex('tripId', 'tripId');
-      db.createObjectStore('kv');
+      db.createObjectStore('media');
+      db.createObjectStore('cache');
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => { dbPromise = null; reject(req.error); };
+    req.onerror = () => { opening = null; reject(req.error); };
   });
-  return dbPromise;
+  return opening;
 }
 
-/** Run fn(stores) inside one transaction; resolves with fn's return value once the transaction commits. */
-async function run(names, mode, fn) {
+async function tx(names, mode, body) {
   const db = await open();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(names, mode);
-    const stores = Object.fromEntries([].concat(names).map(n => [n, tx.objectStore(n)]));
+    const t = db.transaction(names, mode);
+    const stores = {};
+    for (const n of [].concat(names)) stores[n] = t.objectStore(n);
     let out;
-    try { out = fn(stores); } catch (e) { reject(e); return; }
-    tx.oncomplete = () => resolve(out && typeof out === 'object' && 'result' in out && 'readyState' in out ? out.result : out);
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('aborted'));
+    try { out = body(stores); } catch (e) { t.abort(); reject(e); return; }
+    t.oncomplete = () => resolve(out instanceof IDBRequest ? out.result : out);
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('transaction aborted'));
   });
 }
 
-export const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
 
-export async function listTrips() {
-  const all = await run('trips', 'readonly', s => s.trips.getAll());
-  return all.sort((a, b) => (b.stats?.start || b.createdAt) - (a.stats?.start || a.createdAt));
+export async function trips() {
+  const all = await tx('trips', 'readonly', s => s.trips.getAll());
+  return all.sort((a, b) => (b.stats?.start ?? b.createdAt) - (a.stats?.start ?? a.createdAt));
 }
-export const getTrip = id => run('trips', 'readonly', s => s.trips.get(id));
-export function putTrip(trip) {
-  trip.updatedAt = Date.now();
-  return run('trips', 'readwrite', s => { s.trips.put(trip); });
+export const trip = id => tx('trips', 'readonly', s => s.trips.get(id));
+export function saveTrip(t) {
+  t.updatedAt = Date.now();
+  return tx('trips', 'readwrite', s => { s.trips.put(t); });
 }
-export const getPhotos = tripId => run('photos', 'readonly', s => s.photos.index('tripId').getAll(tripId));
-export const putPhotos = photos => run('photos', 'readwrite', s => { for (const p of photos) s.photos.put(p); });
+export const photos = tripId => tx('photos', 'readonly', s => s.photos.index('tripId').getAll(tripId));
+export const savePhotos = list => tx('photos', 'readwrite', s => { for (const p of list) s.photos.put(p); });
 
-export function deleteTrip(id) {
-  return run(['trips', 'photos'], 'readwrite', s => {
+export function removeTrip(id) {
+  return tx(['trips', 'photos', 'media'], 'readwrite', s => {
     s.trips.delete(id);
+    s.media.delete(id);
     const cur = s.photos.index('tripId').openKeyCursor(IDBKeyRange.only(id));
     cur.onsuccess = () => {
       const c = cur.result;
@@ -63,9 +65,12 @@ export function deleteTrip(id) {
   });
 }
 
-export async function kvGet(key) {
-  try { return await run('kv', 'readonly', s => s.kv.get(key)); } catch { return undefined; }
+export const music = id => tx('media', 'readonly', s => s.media.get(id));
+export const saveMusic = (id, value) => tx('media', 'readwrite', s => { if (value) s.media.put(value, id); else s.media.delete(id); });
+
+export async function cacheGet(key) {
+  try { return await tx('cache', 'readonly', s => s.cache.get(key)); } catch { return undefined; }
 }
-export async function kvSet(key, value) {
-  try { await run('kv', 'readwrite', s => { s.kv.put(value, key); }); } catch { /* cache is best-effort */ }
+export async function cacheSet(key, value) {
+  try { await tx('cache', 'readwrite', s => { s.cache.put(value, key); }); } catch { /* best effort */ }
 }
