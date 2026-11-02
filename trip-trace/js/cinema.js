@@ -302,7 +302,7 @@ async function move(snap) {
   const r = S.r;
   // Station lookups may have refined the mode since the replay started.
   const mv = M.r?.moves.find(m => m.key === snap.key) || snap;
-  const a = r.places[mv.from], b = r.places[mv.to];
+  const a = r.places[snap.from], b = r.places[snap.to];
   // Use the real route when it is ready (or arrives within a moment).
   await Promise.race([model.routeMove(mv), sleep(2500)]);
   if (!S.active) return;

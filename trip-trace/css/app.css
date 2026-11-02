@@ -26,6 +26,8 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* File inputs stay in the layout (iOS opens the picker more reliably than for display:none) */
+.file-input { position: fixed; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 html, body { height: 100%; margin: 0; }
 body {
   background: var(--night); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55;
