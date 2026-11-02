@@ -9,6 +9,7 @@ import * as tripview from './tripview.js';
 import * as editor from './editor.js';
 import * as cinema from './cinema.js';
 import { createSample } from './sample.js';
+import { migrate } from './migrate.js';
 import { toast, show, sleep } from './ui.js';
 
 const $ = id => document.getElementById(id);
@@ -100,7 +101,9 @@ async function boot() {
     await openTrip(id || tripId);
   });
 
+  const moved = await migrate();
   library.open();
+  if (moved) toast(`以前のバージョンの旅を${moved}件引き継ぎました`);
   if (/[?&]debug\b/.test(location.search)) window.__tt = { E, M, model, cinema };
 }
 

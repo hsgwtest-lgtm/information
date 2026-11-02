@@ -109,19 +109,22 @@ async function photon(lat, lon, extra) {
 /* Overpass, one place per request: slower, used when Photon is unavailable. */
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
 const overpassQueue = queue(400);
+let overpassFails = 0;
 async function overpassOne(s, wantStation) {
   const ll = `${s.lat.toFixed(6)},${s.lon.toFixed(6)}`;
   const q = '[out:json][timeout:25];' +
     (wantStation ? `nwr(around:800,${ll})[railway~"^(station|halt)$"];out center tags;` : '') +
-    `is_in(${ll})->.a;area.a[name][~"^(tourism|historic|leisure|amenity|aeroway|natural|place)$"~"."];out tags;` +
+    `is_in(${ll})->.a;area.a[name][~"^(tourism|historic|leisure|amenity|aeroway)$"~"."];out tags;` +
     `nwr(around:60,${ll})[name][~"^(tourism|historic)$"~"."];out center tags;`;
   return overpassQueue(async () => {
+    if (overpassFails >= 2) return null;
     for (const url of OVERPASS) {
       try {
-        const r = await getJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) }, 30000);
-        if (r.ok && r.json?.elements) return r.json.elements;
+        const r = await getJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) }, 25000);
+        if (r.ok && r.json?.elements) { overpassFails = 0; return r.json.elements; }
       } catch { /* next server */ }
     }
+    overpassFails++; // two places in a row with every server failing: give up for this session
     return null;
   });
 }
@@ -139,7 +142,7 @@ function fromOverpass(s, elements) {
       if (!station || m < station.m) station = { name: name.replace(/駅$/, ''), lat: pos.lat, lon: pos.lon, m: Math.round(m) };
       continue;
     }
-    const key = ['tourism', 'historic', 'amenity', 'leisure', 'natural', 'place', 'aeroway'].find(k => t[k]);
+    const key = ['tourism', 'historic', 'amenity', 'leisure', 'aeroway', ...(pos ? ['natural', 'place'] : [])].find(k => t[k]);
     if (!key) continue;
     // An enclosing area (no position) counts as being right there.
     near.push({ properties: { name, osm_key: key, osm_value: t[key], extent: pos ? undefined : [0, 0, 0, 0] }, geometry: { coordinates: pos ? [pos.lon, pos.lat] : [s.lon, s.lat] } });

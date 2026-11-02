@@ -5,7 +5,7 @@ const VERSION = 'trip-trace-cinema-1';
 const SHELL = [
   './', './index.html', './manifest.json', './css/app.css', './icons/icon.svg', './icons/icon-192.png',
   './js/app.js', './js/analyze.js', './js/cinema.js', './js/db.js', './js/editor.js', './js/engine.js', './js/exif.js',
-  './js/fmt.js', './js/geo.js', './js/icons.js', './js/importflow.js', './js/library.js', './js/model.js', './js/net.js',
+  './js/fmt.js', './js/geo.js', './js/icons.js', './js/importflow.js', './js/library.js', './js/migrate.js', './js/model.js', './js/net.js',
   './js/paths.js', './js/sample.js', './js/tripview.js', './js/ui.js',
 ];
 const LIBS = [

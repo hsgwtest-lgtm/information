@@ -115,8 +115,8 @@ export async function enrich() {
     M.busy.spots = false;
     if (token !== M.token) return;
     Object.assign(M.spots, got);
-    // Places that could not be looked up count as "no station" so the modes settle.
-    for (const p of missing) if (!(p.key in M.spots)) M.spots[p.key] = null;
+    // Places that could not be looked up stay unknown: their moves keep the distance-based estimate,
+    // and the lookup is tried again the next time the trip is opened.
     recompute();
     emit('names');
   }
