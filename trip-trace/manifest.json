@@ -1,18 +1,19 @@
 {
   "name": "Trip Trace",
   "short_name": "Trip Trace",
-  "description": "旅行の写真を選ぶだけで、立ち寄った場所と移動手段を推定して地図上で旅を辿り直せるPWA",
+  "description": "旅行の写真を選ぶだけで、3Dの航空写真の上をその道のりどおりに飛んで旅をたどり直せるPWA",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0b0f1a",
-  "theme_color": "#0b0f1a",
+  "background_color": "#03050a",
+  "theme_color": "#03050a",
   "lang": "ja",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
   ],
   "categories": ["travel", "photo"]
 }

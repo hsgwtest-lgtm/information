@@ -1,77 +1,72 @@
-// Trip analysis: pure functions, no DOM and no network.
-// photos → outliers removed → spots (nearby shots grouped) → segments (moves with an estimated mode) → highlights.
+// Trip analysis: pure functions (no DOM, no network).
+// photos → outliers set aside → places (photos taken close together) → moves (with an estimated mode) → highlights.
 import { distKm } from './geo.js';
-import { fmtKm, fmtDur, dayKey } from './fmt.js';
+import { km as fmtKm, dur as fmtDur, dayKey } from './fmt.js';
 
 export const MODES = {
-  walk:  { icon: '🚶', label: '徒歩',        color: '#10b981', kmh: 4.5 },
-  train: { icon: '🚃', label: '電車',        color: '#f59e0b', kmh: 45 },
-  car:   { icon: '🚕', label: '車・タクシー', color: '#ec4899', kmh: 30 },
-  boat:  { icon: '⛴️', label: '船',          color: '#0ea5e9', kmh: 25 },
-  plane: { icon: '✈️', label: '飛行機',      color: '#8b5cf6', kmh: 700 },
+  walk:  { label: '徒歩',    by: '歩いて',     kmh: 4.5 },
+  train: { label: '電車',    by: '電車で',     kmh: 40 },
+  car:   { label: '車',      by: '車で',       kmh: 30 },
+  boat:  { label: '船',      by: '船で',       kmh: 22 },
+  plane: { label: '飛行機',  by: '飛行機で',   kmh: 750 },
 };
-export const MODE_LIST = ['walk', 'train', 'car', 'boat', 'plane'];
+export const MODE_ORDER = ['walk', 'train', 'car', 'boat', 'plane'];
 
 export const CFG = {
-  spotRadiusM: 200,     // a photo joins the current spot within this distance of its centre
-  spotLongGapMin: 180,  // after this long, a photo must be very close to stay in the same spot
-  attachMin: 45,        // a photo without GPS joins the spot taken within this many minutes
-  blockGapH: 48,        // photos separated from the main group by this gap are date outliers
-  minorBlockRatio: 0.2, // ...if their group is smaller than this share of the main group
-  maxAccM: 1500,        // GPS error radius above which a position is not trusted
-  spikeMinKm: 2,        // a "spike" goes at least this far away from both neighbours
-  spikeRatio: 0.3,      // ...while the neighbours are close to each other
-  spikeKmh: 80,         // ...and going there and back would need this speed
-  impossibleKmh: 1000,  // faster than any airliner
-  impossibleMinKm: 30,
+  radiusM: 200,          // photos within this distance of a place's centre belong to it
+  longGapMin: 180,       // after this long, a photo must be very close to stay in the same place
+  attachMin: 45,         // a photo without GPS joins the place photographed within this many minutes
+  dateGapH: 48,          // a group of photos separated by this gap from the rest…
+  minorShare: 0.2,       // …and smaller than this share of the main group is set aside
+  maxAccM: 1500,         // GPS error radius above which a position is not trusted
+  spikeKm: 2,            // a spike goes at least this far from both neighbours
+  spikeRatio: 0.3,       // while the neighbours stay close to each other
+  spikeKmh: 80,          // and going there and back would need this speed
+  jumpKmh: 1000,         // faster than any airliner
+  jumpKm: 30,
   walkAlwaysKm: 1.0,
   walkMaxKm: 3.0,
   walkKmh: 4.5,
   planeAlwaysKm: 800,
   planeMinKm: 300,
   planeKmh: 250,
-  longGroundKm: 25,     // without station data, long ground moves default to train
+  longGroundKm: 25,
 };
 
 const byTime = (a, b) => a.time - b.time;
 const located = p => p.lat != null && p.lon != null;
-const speedKmh = (p, q) => distKm(p, q) / Math.max(Math.abs(q.time - p.time) / 3.6e6, 1 / 60);
+const kmh = (p, q) => distKm(p, q) / Math.max(Math.abs(q.time - p.time) / 3.6e6, 1 / 60);
 
-/**
- * Find photos that should not be on the map.
- * keep: Set of ids the user forced back in (never flagged, but still used as neighbours).
- * Returns Map id → reason.
- */
+/** Photos that should stay off the map. keep: ids the user put back. Returns Map id → reason. */
 export function detectOutliers(photos, keep = new Set(), cfg = CFG) {
-  const reasons = new Map();
+  const why = new Map();
   const timed = photos.filter(p => p.time != null).sort(byTime);
 
-  // 1) Date outliers: small groups of photos days away from the main group.
+  // 1. Small groups of photos taken days away from the rest (old photos picked by mistake).
   if (timed.length >= 3) {
-    const blocks = [];
-    let cur = [timed[0]];
+    const groups = [[timed[0]]];
     for (let i = 1; i < timed.length; i++) {
-      if (timed[i].time - timed[i - 1].time > cfg.blockGapH * 3.6e6) { blocks.push(cur); cur = []; }
-      cur.push(timed[i]);
+      if (timed[i].time - timed[i - 1].time > cfg.dateGapH * 3.6e6) groups.push([]);
+      groups[groups.length - 1].push(timed[i]);
     }
-    blocks.push(cur);
-    if (blocks.length > 1) {
-      const biggest = Math.max(...blocks.map(b => b.length));
-      for (const b of blocks) {
-        if (b.length >= biggest || b.length > Math.max(2, biggest * cfg.minorBlockRatio)) continue;
-        for (const p of b) if (!keep.has(p.id)) reasons.set(p.id, '撮影日が他の写真から離れています');
+    if (groups.length > 1) {
+      const main = Math.max(...groups.map(g => g.length));
+      for (const g of groups) {
+        if (g.length === main || g.length > Math.max(2, main * cfg.minorShare)) continue;
+        for (const p of g) if (!keep.has(p.id)) why.set(p.id, '撮影日がほかの写真から離れています');
       }
     }
   }
 
-  // 2) Low-accuracy positions.
+  // 2. Positions with a large error radius.
   for (const p of photos) {
-    if (!located(p) || p.acc == null || keep.has(p.id) || reasons.has(p.id)) continue;
-    if (p.acc > cfg.maxAccM) reasons.set(p.id, `位置の誤差が大きい写真です（±${fmtKm(p.acc / 1000)}）`);
+    if (located(p) && p.acc != null && p.acc > cfg.maxAccM && !keep.has(p.id) && !why.has(p.id)) {
+      why.set(p.id, `位置の誤差が大きい写真です（±${fmtKm(p.acc / 1000)}）`);
+    }
   }
 
-  // 3) Position spikes and impossible jumps, judged against time-ordered neighbours.
-  let pts = timed.filter(p => located(p) && !reasons.has(p.id));
+  // 3. Spikes and impossible jumps against time-ordered neighbours.
+  const pts = timed.filter(p => located(p) && !why.has(p.id));
   for (let pass = 0; pass < 5; pass++) {
     let changed = false;
     for (let i = 0; i < pts.length; i++) {
@@ -80,67 +75,58 @@ export function detectOutliers(photos, keep = new Set(), cfg = CFG) {
       const a = pts[i - 1], b = pts[i + 1];
       let bad = false;
       if (a && b) {
-        const dax = distKm(a, x), dxb = distKm(x, b), dab = distKm(a, b);
-        const hours = Math.max((b.time - a.time) / 3.6e6, 1 / 60);
-        const spike = dax >= cfg.spikeMinKm && dxb >= cfg.spikeMinKm &&
-          dab <= cfg.spikeRatio * Math.min(dax, dxb) && (dax + dxb) / hours > cfg.spikeKmh;
-        const impossible = speedKmh(a, x) > cfg.impossibleKmh && dax > cfg.impossibleMinKm &&
-          speedKmh(x, b) > cfg.impossibleKmh && dxb > cfg.impossibleMinKm;
-        bad = spike || impossible;
+        const ax = distKm(a, x), xb = distKm(x, b), ab = distKm(a, b);
+        const h = Math.max((b.time - a.time) / 3.6e6, 1 / 60);
+        const spike = ax >= cfg.spikeKm && xb >= cfg.spikeKm && ab <= cfg.spikeRatio * Math.min(ax, xb) && (ax + xb) / h > cfg.spikeKmh;
+        const jump = kmh(a, x) > cfg.jumpKmh && ax > cfg.jumpKm && kmh(x, b) > cfg.jumpKmh && xb > cfg.jumpKm;
+        bad = spike || jump;
       } else if (a || b) {
-        // First or last photo: flag only if its one neighbour is consistent with the next one.
         const n1 = a || b, n2 = a ? pts[i - 2] : pts[i + 2];
-        const jump = speedKmh(n1, x) > cfg.impossibleKmh && distKm(n1, x) > cfg.impossibleMinKm;
-        bad = jump && (!n2 || speedKmh(n1, n2) <= cfg.impossibleKmh);
+        bad = kmh(n1, x) > cfg.jumpKmh && distKm(n1, x) > cfg.jumpKm && (!n2 || kmh(n1, n2) <= cfg.jumpKmh);
       }
-      if (bad) {
-        reasons.set(x.id, '前後の写真から大きく外れた位置です');
-        pts.splice(i, 1);
-        i--;
-        changed = true;
-      }
+      if (bad) { why.set(x.id, '前後の写真から大きく外れた位置です'); pts.splice(i, 1); i--; changed = true; }
     }
     if (!changed) break;
   }
-  return reasons;
+  return why;
 }
 
-/** Group time-ordered located photos into spots. */
-export function clusterSpots(photos, cfg = CFG) {
+/** Group time-ordered located photos into places. */
+export function clusterPlaces(photos, cfg = CFG) {
   const pts = photos.filter(p => located(p) && p.time != null).sort(byTime);
-  const spots = [];
+  const out = [];
   let cur = null;
   for (const p of pts) {
     if (cur) {
-      const dM = distKm(cur, p) * 1000;
-      const gapMin = (p.time - cur.end) / 60000;
-      if (dM <= cfg.spotRadiusM && (gapMin <= cfg.spotLongGapMin || dM <= cfg.spotRadiusM / 2)) {
+      const m = distKm(cur, p) * 1000;
+      const gap = (p.time - cur.end) / 60000;
+      if (m <= cfg.radiusM && (gap <= cfg.longGapMin || m <= cfg.radiusM / 2)) {
         cur.photos.push(p);
-        cur.located++;
-        cur.lat += (p.lat - cur.lat) / cur.located;
-        cur.lon += (p.lon - cur.lon) / cur.located;
+        cur.n++;
+        cur.lat += (p.lat - cur.lat) / cur.n;
+        cur.lon += (p.lon - cur.lon) / cur.n;
         cur.end = p.time;
         continue;
       }
     }
-    cur = { lat: p.lat, lon: p.lon, start: p.time, end: p.time, photos: [p], located: 1 };
-    spots.push(cur);
+    cur = { lat: p.lat, lon: p.lon, start: p.time, end: p.time, photos: [p], n: 1 };
+    out.push(cur);
   }
-  return spots;
+  return out;
 }
 
-/** Put photos that have a time but no GPS into the spot closest in time. Returns the ones left over. */
-export function attachUnlocated(spots, photos, cfg = CFG) {
+/** Photos with a time but no GPS join the place photographed closest in time. Returns the ones left over. */
+export function attachUnlocated(places, photos, cfg = CFG) {
   const left = [];
   for (const p of photos) {
     if (located(p)) continue;
-    if (p.time == null || !spots.length) { left.push(p); continue; }
-    let best = null, bestMin = Infinity;
-    for (const s of spots) {
+    if (p.time == null || !places.length) { left.push(p); continue; }
+    let best = null, gap = Infinity;
+    for (const s of places) {
       const m = p.time < s.start ? (s.start - p.time) / 60000 : p.time > s.end ? (p.time - s.end) / 60000 : 0;
-      if (m < bestMin) { bestMin = m; best = s; }
+      if (m < gap) { gap = m; best = s; }
     }
-    if (bestMin <= cfg.attachMin) {
+    if (gap <= cfg.attachMin) {
       best.photos.push(p);
       best.photos.sort(byTime);
       best.start = Math.min(best.start, p.time);
@@ -151,38 +137,34 @@ export function attachUnlocated(spots, photos, cfg = CFG) {
 }
 
 /**
- * Estimate how the traveller got from one spot to the next.
- * stations: {spotKey: {name, lat, lon} | null}; a missing key means "not looked up".
+ * Estimate how the traveller moved between two places.
+ * stations: {placeKey: {name, lat, lon} | null}; a missing key means "not looked up yet".
  */
 export function classify(from, to, stations, cfg = CFG) {
-  const km = distKm(from, to);
-  const gapH = Math.max((to.start - from.end) / 3.6e6, 1 / 60);
-  const kmh = km / gapH;
-  if (km < cfg.walkAlwaysKm) return { mode: 'walk', reason: `${fmtKm(km)}と近いので徒歩` };
-  if (km >= cfg.planeAlwaysKm || (km >= cfg.planeMinKm && kmh >= cfg.planeKmh))
-    return { mode: 'plane', reason: `${fmtKm(km)}を${fmtDur(gapH)}で移動` };
-  if (km <= cfg.walkMaxKm && km / cfg.walkKmh <= gapH) return { mode: 'walk', reason: '歩ける距離と時間' };
+  const d = distKm(from, to);
+  const h = Math.max((to.start - from.end) / 3.6e6, 1 / 60);
+  if (d < cfg.walkAlwaysKm) return { mode: 'walk', reason: `${fmtKm(d)}と近いので徒歩` };
+  if (d >= cfg.planeAlwaysKm || (d >= cfg.planeMinKm && d / h >= cfg.planeKmh)) return { mode: 'plane', reason: `${fmtKm(d)}を${fmtDur(h)}で移動` };
+  if (d <= cfg.walkMaxKm && d / cfg.walkKmh <= h) return { mode: 'walk', reason: '歩ける距離と時間' };
   const A = stations?.[from.key], B = stations?.[to.key];
   if (A !== undefined && B !== undefined) {
-    if (A && B && A.name !== B.name) return { mode: 'train', reason: `${A.name}駅と${B.name}駅が近い`, from: A, to: B };
+    if (A && B && A.name !== B.name) return { mode: 'train', reason: `${A.name}駅と${B.name}駅が近い`, a: A, b: B };
     return { mode: 'car', reason: A || B ? '片方の近くに駅がない' : '近くに駅がない' };
   }
-  return km >= cfg.longGroundKm
-    ? { mode: 'train', reason: `${fmtKm(km)}の長距離` }
-    : { mode: 'car', reason: '駅の情報を待っています' };
+  return d >= cfg.longGroundKm ? { mode: 'train', reason: `${fmtKm(d)}の長い移動` } : { mode: 'car', reason: '駅を調べています' };
 }
 
-/** Spots worth a station lookup: endpoints of moves that are neither walks nor flights. */
-export function spotsNeedingStations(spots, cfg = CFG) {
+/** Places worth a station lookup: ends of moves that are neither walks nor flights. */
+export function placesNeedingStations(places, cfg = CFG) {
   const need = new Set();
-  for (let i = 0; i + 1 < spots.length; i++) {
-    const r = classify(spots[i], spots[i + 1], null, cfg);
-    if (r.mode !== 'walk' && r.mode !== 'plane') { need.add(spots[i]); need.add(spots[i + 1]); }
+  for (let i = 0; i + 1 < places.length; i++) {
+    const m = classify(places[i], places[i + 1], null, cfg).mode;
+    if (m !== 'walk' && m !== 'plane') { need.add(places[i]); need.add(places[i + 1]); }
   }
   return [...need];
 }
 
-/** Pick up to n photos spread evenly across the spot; starred photos always come first. */
+/** Up to n photos spread across the visit; starred photos always come first. */
 export function pickHighlights(photos, n, stars = {}) {
   if (!n || n >= photos.length) return photos.slice();
   const starred = photos.filter(p => stars[p.id]);
@@ -194,62 +176,67 @@ export function pickHighlights(photos, n, stars = {}) {
   return [...starred, ...picked].sort(byTime);
 }
 
-export const segKey = (a, b) => `${a.key}>${b.key}`;
+export const moveKey = (a, b) => `${a.key}>${b.key}`;
+
+/** Rough travel time in hours (route duration wins when known). */
+export function travelHours(mode, d, routeHours) {
+  if (routeHours && (mode === 'walk' || mode === 'car')) return routeHours;
+  if (mode === 'plane') return d / MODES.plane.kmh + 0.6;
+  if (mode === 'train') return d / MODES.train.kmh + 0.1;
+  return d / (MODES[mode]?.kmh || 30);
+}
 
 /**
  * Full analysis.
- * trip: { exclusions: {id: 'out'|'in'}, stars: {id: true}, modes: {segKey: mode}, highlightCount, spotRadiusM }
+ * trip: {settings: {perPlace, radiusM}, exclusions: {id: 'out'|'in'}, stars: {id: true}, modes: {moveKey: mode}}
  */
 export function analyze(photos, trip = {}, stations = null) {
-  const cfg = { ...CFG, spotRadiusM: trip.spotRadiusM || CFG.spotRadiusM };
+  const set = trip.settings || {};
+  const cfg = { ...CFG, radiusM: set.radiusM || CFG.radiusM };
   const ex = trip.exclusions || {};
   const keep = new Set(Object.keys(ex).filter(id => ex[id] === 'in'));
-  const candidates = photos.filter(p => ex[p.id] !== 'out');
-  const auto = detectOutliers(candidates, keep, cfg);
+  const auto = detectOutliers(photos.filter(p => ex[p.id] !== 'out'), keep, cfg);
 
-  const excluded = [];
-  const kept = [];
+  const excluded = [], kept = [];
   for (const p of photos) {
-    if (ex[p.id] === 'out') excluded.push({ photo: p, reason: '手動で除外しました', auto: false });
+    if (ex[p.id] === 'out') excluded.push({ photo: p, reason: '手動で外しました', auto: false });
     else if (auto.has(p.id)) excluded.push({ photo: p, reason: auto.get(p.id), auto: true });
     else kept.push(p);
   }
 
-  const spots = clusterSpots(kept, cfg);
-  const unplaced = attachUnlocated(spots, kept, cfg).map(p => ({
+  const places = clusterPlaces(kept, cfg);
+  const unplaced = attachUnlocated(places, kept, cfg).map(p => ({
     photo: p, reason: p.time == null ? '撮影日時がありません' : '位置情報がなく、近い時刻の写真もありません',
   }));
 
   const dayKeys = [];
-  spots.forEach((s, i) => {
+  places.forEach((s, i) => {
     s.idx = i;
     s.key = s.photos.find(located).id;
     s.off = s.photos.find(p => p.off)?.off || null;
-    const dk = dayKey(s.start, s.off);
-    if (!dayKeys.includes(dk)) dayKeys.push(dk);
-    s.day = dayKeys.indexOf(dk);
-    s.highlights = pickHighlights(s.photos, trip.highlightCount ?? 3, trip.stars || {});
+    const k = dayKey(s.start, s.off);
+    if (!dayKeys.includes(k)) dayKeys.push(k);
+    s.day = dayKeys.indexOf(k);
+    s.highlights = pickHighlights(s.photos, set.perPlace ?? 3, trip.stars || {});
   });
-  const days = dayKeys.map((k, i) => ({ key: k, index: i, start: spots.find(s => s.day === i).start, off: spots.find(s => s.day === i).off }));
+  const days = dayKeys.map((k, i) => {
+    const first = places.find(s => s.day === i);
+    return { key: k, index: i, start: first.start, off: first.off };
+  });
 
-  const segments = [];
-  for (let i = 0; i + 1 < spots.length; i++) {
-    const from = spots[i], to = spots[i + 1];
-    const auto = classify(from, to, stations, cfg);
-    const key = segKey(from, to);
+  const moves = [];
+  for (let i = 0; i + 1 < places.length; i++) {
+    const a = places[i], b = places[i + 1];
+    const est = classify(a, b, stations, cfg);
+    const key = moveKey(a, b);
     const forced = trip.modes?.[key];
-    segments.push({
-      idx: i, key, from: i, to: i + 1, km: distKm(from, to),
-      auto: auto.mode, mode: forced && MODES[forced] ? forced : auto.mode, forced: !!(forced && MODES[forced]),
-      reason: auto.reason, stationFrom: auto.from || stations?.[from.key] || null, stationTo: auto.to || stations?.[to.key] || null,
-      newDay: to.day !== from.day,
+    const ok = forced && MODES[forced];
+    moves.push({
+      idx: i, key, from: i, to: i + 1, km: distKm(a, b),
+      auto: est.mode, mode: ok ? forced : est.mode, forced: !!ok, reason: est.reason,
+      stationA: est.a || stations?.[a.key] || null, stationB: est.b || stations?.[b.key] || null,
+      newDay: b.day !== a.day,
     });
   }
-  return { spots, segments, excluded, unplaced, days, used: kept.length - unplaced.length };
-}
-
-/** Rough travel time for the clock during replay. */
-export function travelHours(mode, km) {
-  if (mode === 'plane') return km / MODES.plane.kmh + 0.5;
-  return km / (MODES[mode]?.kmh || 30);
+  return { places, moves, excluded, unplaced, days, used: kept.length - unplaced.length };
 }
