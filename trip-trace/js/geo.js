@@ -137,3 +137,27 @@ export const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 export const angleDelta = (from, to) => ((to - from + 540) % 360) - 180;
 export const smooth = t => t * t * (3 - 2 * t);
 export const easeInOut = t => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+
+/**
+ * Compass bearing of a trip's long axis, pointing from where it starts towards where it ends,
+ * kept within ±110° of north so the map never turns upside down.
+ */
+export function axisBearing(points) {
+  if (points.length < 2) return -18;
+  const lat0 = points.reduce((a, p) => a + p.lat, 0) / points.length;
+  const lon0 = points.reduce((a, p) => a + p.lon, 0) / points.length;
+  const kx = Math.cos(rad(lat0));
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const p of points) {
+    const x = (p.lon - lon0) * kx, y = p.lat - lat0;
+    sxx += x * x; syy += y * y; sxy += x * y;
+  }
+  if (sxx + syy < 1e-10) return -18;
+  const a = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  let b = 90 - deg(a);
+  const f = points[0], l = points[points.length - 1];
+  if (((l.lon - f.lon) * kx) * Math.cos(a) + (l.lat - f.lat) * Math.sin(a) < 0) b += 180;
+  b = ((b + 540) % 360) - 180;
+  if (b > 110) b -= 180; else if (b < -110) b += 180;
+  return b;
+}

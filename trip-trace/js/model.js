@@ -88,8 +88,22 @@ export async function enrich() {
     autoTitle();
   })();
 
-  const missing = r.places.filter(p => !(p.key in M.spots));
-  const spotsJob = missing.length ? (M.busy.spots = true, net.spots(missing)) : null;
+  // Stations decide train vs car, so look those up first; names follow for every place.
+  const needSt = new Set(placesNeedingStations(r.places).map(p => p.key));
+  const stale = p => !(p.key in M.spots) || (needSt.has(p.key) && M.spots[p.key] && !M.spots[p.key].checkedStation);
+  const missing = r.places.filter(stale).sort((a, b) => Number(needSt.has(b.key)) - Number(needSt.has(a.key)));
+  let spotsJob = null;
+  if (missing.length) {
+    M.busy.spots = true;
+    emit('progress');
+    let changed = 0;
+    spotsJob = net.spots(missing, needSt, (key, v) => {
+      if (token !== M.token) return;
+      M.spots[key] = v;
+      emit('names');
+      if (needSt.has(key) && ++changed % 3 === 0) recompute();
+    });
+  }
 
   // Moves that do not depend on stations can be routed right away.
   const knowsStations = mv => (M.r.places[mv.from].key in M.spots) && (M.r.places[mv.to].key in M.spots);
@@ -101,7 +115,7 @@ export async function enrich() {
     M.busy.spots = false;
     if (token !== M.token) return;
     Object.assign(M.spots, got);
-    // Spots that could not be looked up count as "no station" so modes settle.
+    // Places that could not be looked up count as "no station" so the modes settle.
     for (const p of missing) if (!(p.key in M.spots)) M.spots[p.key] = null;
     recompute();
     emit('names');

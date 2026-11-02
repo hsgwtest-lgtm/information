@@ -1,6 +1,6 @@
 // Network lookups, all keyless and cached on this device.
 //   route()  OSRM (FOSSGIS servers): walking / driving geometry; ferry steps come back as boat parts
-//   spots()  Overpass: nearest station and the named place a spot sits in (shrine, park, museum…)
+//   spots()  Photon: nearest station and a name for the stop (shrine, park, museum…)
 //   area()   Nominatim: district and city names, 1 request per second
 import * as db from './db.js';
 import { decimate, distKm, pathKm } from './geo.js';
@@ -9,7 +9,6 @@ const OSRM = {
   foot: 'https://routing.openstreetmap.de/routed-foot/route/v1/foot/',
   car: 'https://routing.openstreetmap.de/routed-car/route/v1/driving/',
 };
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const NOMINATIM = 'https://nominatim.openstreetmap.org/reverse';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const r4 = v => v.toFixed(4), r5 = v => v.toFixed(5);
@@ -73,88 +72,99 @@ export async function route(profile, a, b) {
   });
 }
 
-/* ---------- Stations and landmarks (Overpass) ---------- */
-function score(t) {
-  if (t.tourism) return { attraction: 10, theme_park: 10, zoo: 10, aquarium: 10, museum: 8, gallery: 7, viewpoint: 8, artwork: 6, hotel: 5, camp_site: 5, picnic_site: 4, information: 0 }[t.tourism] ?? 5;
-  if (t.historic) return { castle: 10, monument: 7, ruins: 7, archaeological_site: 7, memorial: 3, wayside_shrine: 2, boundary_stone: 0 }[t.historic] ?? 6;
+/* ---------- Stations and landmarks (Photon) ---------- */
+const PHOTON = 'https://photon.komoot.io/reverse';
+const photonQueue = queue(1050);
+
+function score(key, value) {
+  const t = { [key]: value };
+  if (t.tourism) return { attraction: 10, theme_park: 10, zoo: 10, aquarium: 10, museum: 8, gallery: 7, viewpoint: 7, artwork: 5, hotel: 5, camp_site: 5 }[t.tourism] ?? 0;
+  if (t.historic) return { castle: 10, monument: 6, ruins: 7, archaeological_site: 7, memorial: 3 }[t.historic] ?? 0;
+  if (t.amenity) return { place_of_worship: 9, marketplace: 7, theatre: 7, arts_centre: 7, university: 5, townhall: 4 }[t.amenity] ?? 0;
+  if (t.leisure) return { garden: 8, park: 7, stadium: 8, water_park: 8, beach_resort: 8, marina: 6 }[t.leisure] ?? 0;
+  if (t.natural) return { beach: 8, peak: 8, volcano: 9, cape: 8, hot_spring: 8, geyser: 8, bay: 6 }[t.natural] ?? 0;
+  if (t.place) return { island: 9, islet: 8, square: 6 }[t.place] ?? 0;
   if (t.aeroway) return { aerodrome: 10, terminal: 9 }[t.aeroway] ?? 0;
-  if (t.amenity) return { place_of_worship: 9, marketplace: 7, theatre: 7, arts_centre: 7, university: 5, townhall: 4, library: 4, restaurant: 3, cafe: 3, bar: 3, pub: 3 }[t.amenity] ?? 0;
-  if (t.leisure) return { garden: 8, park: 7, stadium: 8, water_park: 8, beach_resort: 8, marina: 6, golf_course: 4, sports_centre: 3 }[t.leisure] ?? 0;
-  if (t.natural) {
-    if (t.natural === 'water') return ['lake', 'reservoir', 'pond', 'lagoon'].includes(t.water) ? 5 : 0;
-    return { beach: 8, peak: 8, volcano: 9, cape: 8, hot_spring: 8, geyser: 8 }[t.natural] ?? 0;
-  }
+  if (t.railway) return t.railway === 'station' ? 7 : 0;
   return 0;
 }
-const nameOf = t => t?.['name:ja'] || t?.name || null;
+// Parts of a larger place: never a good name for the whole stop.
+const GENERIC = /^(本殿|拝殿|本堂|山門|楼門|鐘楼|社務所|手水舎|神門|中門|[東西南北]門|舞殿|若宮|御朱印所|朱印所|授与所|トイレ|公衆トイレ|駐車場|入口|出口|展望台|休憩所|案内所)$/;
+const NOISE = /(駐車場|トイレ|バス停|のりば|乗り場|入口|出口|案内板|説明板|由来)$/;
 
-function query(list) {
-  return '[out:json][timeout:90];' + list.map((s, i) => {
-    const ll = `${s.lat.toFixed(6)},${s.lon.toFixed(6)}`;
-    return `make marker idx="${i}";out;` +
-      `nwr(around:800,${ll})[railway~"^(station|halt)$"];out center tags;` +
-      `is_in(${ll})->.a;area.a[name][~"^(tourism|historic|leisure|amenity|aeroway|natural)$"~"."];out tags;` +
-      `nwr(around:45,${ll})[name][~"^(tourism|historic)$"~"."];out center tags;`;
-  }).join('');
+async function photon(lat, lon, extra) {
+  return photonQueue(async () => {
+    try {
+      const r = await getJSON(`${PHOTON}?lat=${lat}&lon=${lon}&${extra}`, {}, 9000);
+      return r.ok ? (r.json?.features || []) : null;
+    } catch { return null; }
+  });
 }
 
-function parse(list, elements) {
-  const out = list.map(() => ({ station: null, landmark: null }));
-  const cands = list.map(() => []);
-  let cur = -1;
-  for (const e of elements) {
-    if (e.type === 'marker') { cur = Number(e.tags?.idx); continue; }
-    if (!list[cur]) continue;
-    const t = e.tags || {};
-    const name = nameOf(t);
-    if (!name) continue;
-    const pos = e.lat != null ? { lat: e.lat, lon: e.lon } : e.center ? { lat: e.center.lat, lon: e.center.lon } : null;
-    if (t.railway === 'station' || t.railway === 'halt') {
-      if (!pos) continue;
-      const m = distKm(list[cur], pos) * 1000;
-      if (!out[cur].station || m < out[cur].station.m) out[cur].station = { name: name.replace(/駅$/, ''), lat: pos.lat, lon: pos.lon, m: Math.round(m) };
-      continue;
-    }
-    const base = score(t);
-    if (base < 3) continue;
-    cands[cur].push({ name, s: base + (pos ? 1 : 2) + (t.wikidata || t.wikipedia ? 2 : 0) });
+/** The best name for a stop from nearby named features. */
+export function pickLandmark(features, at) {
+  const c = [];
+  for (const f of features) {
+    const p = f.properties || {};
+    const name = (p.name || '').trim();
+    if (!name || name.length < 2 || GENERIC.test(name)) continue;
+    const [x, y] = f.geometry?.coordinates || [];
+    const m = x == null ? 300 : distKm(at, { lat: y, lon: x }) * 1000;
+    c.push({ name, base: score(p.osm_key, p.osm_value), m, big: !!p.extent });
   }
-  out.forEach((o, i) => {
-    if (o.station && o.station.m <= 120) cands[i].push({ name: `${o.station.name}駅`, s: 9 });
-    const best = cands[i].sort((a, b) => b.s - a.s)[0];
-    if (best && best.s >= 5) o.landmark = best.name;
-  });
-  return out;
+  // A name that most nearby features share ("大涌谷", "江ノ島") is usually the place itself.
+  let shared = null, sharedN = 0;
+  for (const a of c) {
+    if (a.name.length > 10 || NOISE.test(a.name)) continue;
+    const n = c.filter(b => b !== a && b.name.includes(a.name)).length;
+    if (n > sharedN || (n === sharedN && shared && a.name.length > shared.length)) { shared = a.name; sharedN = n; }
+  }
+  let best = null, bestS = 5;
+  for (const a of c) {
+    const s = a.base - a.m / 60 + (a.big ? 1 : 0);
+    if (a.base > 0 && s >= bestS) { best = a; bestS = s; }
+  }
+  if (sharedN >= 3 && (!best || bestS < 8 || best.name.includes(shared))) return shared;
+  return best ? best.name : null;
 }
 
 export async function cachedSpots(list) {
   const out = {};
   for (const s of list) {
-    const v = await db.cacheGet(`s:${r4(s.lat)},${r4(s.lon)}`);
+    const v = await db.cacheGet(`p:${r4(s.lat)},${r4(s.lon)}`);
     if (v) out[s.key] = v;
   }
   return out;
 }
 
-/** {placeKey: {station, landmark}}; places that could not be looked up are left out. */
-export async function spots(list) {
+/**
+ * {placeKey: {station, landmark}} for each place, looked up one request at a time.
+ * needStation: set of place keys whose nearest station matters (ends of non-walking moves).
+ * onEach(key, value) is called as results arrive. Places that could not be looked up are left out.
+ */
+export async function spots(list, needStation = new Set(), onEach) {
   const out = await cachedSpots(list);
-  const todo = list.filter(s => !out[s.key]);
-  for (let i = 0; i < todo.length; i += 20) {
-    const chunk = todo.slice(i, i + 20);
-    const body = 'data=' + encodeURIComponent(query(chunk));
-    let elements = null;
-    for (const url of OVERPASS) {
-      try {
-        const r = await getJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }, 80000);
-        if (r.ok && r.json?.elements) { elements = r.json.elements; break; }
-      } catch { /* try the next server */ }
+  for (const s of list) {
+    if (out[s.key]) continue;
+    const near = await photon(s.lat, s.lon, 'radius=0.3&limit=20');
+    if (!near) continue;
+    let station = null;
+    if (needStation.has(s.key)) {
+      const st = await photon(s.lat, s.lon, 'radius=0.8&limit=5&osm_tag=railway:station&osm_tag=railway:halt');
+      if (!st) continue;
+      for (const f of st) {
+        const [x, y] = f.geometry?.coordinates || [];
+        if (x == null || !f.properties?.name) continue;
+        const m = distKm(s, { lat: y, lon: x }) * 1000;
+        if (m <= 800 && (!station || m < station.m)) station = { name: f.properties.name.replace(/駅$/, ''), lat: y, lon: x, m: Math.round(m) };
+      }
     }
-    if (!elements) continue;
-    parse(chunk, elements).forEach((v, k) => {
-      out[chunk[k].key] = v;
-      db.cacheSet(`s:${r4(chunk[k].lat)},${r4(chunk[k].lon)}`, v);
-    });
+    let landmark = pickLandmark(near, s);
+    if (!landmark && station && station.m <= 120) landmark = `${station.name}駅`;
+    const v = { station, landmark, checkedStation: needStation.has(s.key) };
+    out[s.key] = v;
+    db.cacheSet(`p:${r4(s.lat)},${r4(s.lon)}`, v);
+    onEach?.(s.key, v);
   }
   return out;
 }

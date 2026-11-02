@@ -5,7 +5,7 @@ import { M } from './model.js';
 import { icon } from './icons.js';
 import { url, show, toast, prompt } from './ui.js';
 import { esc, dotRange, stayLabel, km, clock, dayTitle, jpDate } from './fmt.js';
-import { bounds } from './geo.js';
+import { bounds, axisBearing } from './geo.js';
 
 const $ = id => document.getElementById(id);
 let hooks = {};
@@ -109,7 +109,7 @@ export function overviewCamera() {
   const flight = M.r.moves.some(m => m.mode === 'plane');
   return E.frame(bounds(M.r.places.length > 1 || pts.length > 1 ? pts : [[pts[0][0] - 0.01, pts[0][1] - 0.01], [pts[0][0] + 0.01, pts[0][1] + 0.01]]), {
     padding: { top: top + 20, bottom: footInset(), left: 36, right: 36 },
-    pitch: flight ? 25 : 52, bearing: -18, maxZoom: 15.5,
+    pitch: flight ? 25 : 52, bearing: flight ? 0 : axisBearing(M.r.places), maxZoom: 15.5,
   });
 }
 

@@ -5,7 +5,7 @@ import * as db from './db.js';
 import * as model from './model.js';
 import { M } from './model.js';
 import { MODES } from './analyze.js';
-import { cumulative, along, bearing, pDist, lerp, clamp, angleDelta, smooth, easeInOut, bounds } from './geo.js';
+import { cumulative, along, bearing, pDist, lerp, clamp, angleDelta, smooth, easeInOut, bounds, axisBearing } from './geo.js';
 import { clock, hourOf, dayTitle, jpDate, dotRange, stayLabel, km, dur, esc } from './fmt.js';
 import { icon } from './icons.js';
 import { url, sleep } from './ui.js';
@@ -23,7 +23,7 @@ const S = {
 
 /* =============== Clock =============== */
 function loop(now) {
-  const dt = Math.min(now - (S.last || now), 100);
+  const dt = Math.min(now - (S.last || now), 200);
   S.last = now;
   const step = S.paused ? 0 : dt * S.speed;
   for (const task of [...S.tasks]) task(step);
@@ -298,8 +298,10 @@ async function visit(p) {
   await run(450, f => setProgress(0.95 + f * 0.05));
 }
 
-async function move(mv) {
+async function move(snap) {
   const r = S.r;
+  // Station lookups may have refined the mode since the replay started.
+  const mv = M.r?.moves.find(m => m.key === snap.key) || snap;
   const a = r.places[mv.from], b = r.places[mv.to];
   // Use the real route when it is ready (or arrives within a moment).
   await Promise.race([model.routeMove(mv), sleep(2500)]);
@@ -407,7 +409,7 @@ async function outro() {
   E.setPlaces(r.places, model.placeName, () => 'done');
   const pts = r.places.map(p => [p.lon, p.lat]).concat(S.trail);
   const flight = r.moves.some(m => m.mode === 'plane');
-  const cam = E.frame(bounds(pts), { padding: { top: 140, bottom: Math.round(window.innerHeight * 0.42), left: 40, right: 40 }, pitch: flight ? 20 : 45, bearing: -15, maxZoom: 15 });
+  const cam = E.frame(bounds(pts), { padding: { top: 140, bottom: Math.round(window.innerHeight * 0.42), left: 40, right: 40 }, pitch: flight ? 20 : 45, bearing: flight ? 0 : axisBearing(r.places), maxZoom: 15 });
   let total = 0;
   for (const mv of r.moves) total += model.moveSummary(mv).km;
   const showCard = () => card(`
