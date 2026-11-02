@@ -178,7 +178,15 @@ export function init(container) {
     map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
   }
   setupSpin();
-  return new Promise(resolve => map.once('load', resolve));
+  // Start as soon as the style is ready; tiles keep streaming in behind the UI.
+  return new Promise(resolve => {
+    let done = false;
+    const go = () => { if (!done) { done = true; resolve(); } };
+    map.once('style.load', go);
+    map.once('load', go);
+    const poll = () => { if (done) return; if (map.isStyleLoaded()) go(); else setTimeout(poll, 200); };
+    setTimeout(poll, 200);
+  });
 }
 
 export function on(fn) { listeners.add(fn); return () => listeners.delete(fn); }

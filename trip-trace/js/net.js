@@ -1,6 +1,6 @@
 // Network lookups, all keyless and cached on this device.
 //   route()  OSRM (FOSSGIS servers): walking / driving geometry; ferry steps come back as boat parts
-//   spots()  Photon: nearest station and a name for the stop (shrine, park, museum…)
+//   spots()  Photon (Overpass as fallback): nearest station and a name for the stop (shrine, park, museum…)
 //   area()   Nominatim: district and city names, 1 request per second
 import * as db from './db.js';
 import { decimate, distKm, pathKm } from './geo.js';
@@ -92,13 +92,59 @@ function score(key, value) {
 const GENERIC = /^(本殿|拝殿|本堂|山門|楼門|鐘楼|社務所|手水舎|神門|中門|[東西南北]門|舞殿|若宮|御朱印所|朱印所|授与所|トイレ|公衆トイレ|駐車場|入口|出口|展望台|休憩所|案内所)$/;
 const NOISE = /(駐車場|トイレ|バス停|のりば|乗り場|入口|出口|案内板|説明板|由来)$/;
 
+let photonDown = false;
 async function photon(lat, lon, extra) {
+  if (photonDown) return null;
   return photonQueue(async () => {
+    if (photonDown) return null;
     try {
-      const r = await getJSON(`${PHOTON}?lat=${lat}&lon=${lon}&${extra}`, {}, 9000);
-      return r.ok ? (r.json?.features || []) : null;
-    } catch { return null; }
+      const r = await getJSON(`${PHOTON}?lat=${lat}&lon=${lon}&${extra}`, {}, 7000);
+      if (r.ok) return r.json?.features || [];
+    } catch { /* timeout or blocked */ }
+    photonDown = true; // stop waiting on it for the rest of this session
+    return null;
   });
+}
+
+/* Overpass, one place per request: slower, used when Photon is unavailable. */
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const overpassQueue = queue(400);
+async function overpassOne(s, wantStation) {
+  const ll = `${s.lat.toFixed(6)},${s.lon.toFixed(6)}`;
+  const q = '[out:json][timeout:25];' +
+    (wantStation ? `nwr(around:800,${ll})[railway~"^(station|halt)$"];out center tags;` : '') +
+    `is_in(${ll})->.a;area.a[name][~"^(tourism|historic|leisure|amenity|aeroway|natural|place)$"~"."];out tags;` +
+    `nwr(around:60,${ll})[name][~"^(tourism|historic)$"~"."];out center tags;`;
+  return overpassQueue(async () => {
+    for (const url of OVERPASS) {
+      try {
+        const r = await getJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) }, 30000);
+        if (r.ok && r.json?.elements) return r.json.elements;
+      } catch { /* next server */ }
+    }
+    return null;
+  });
+}
+function fromOverpass(s, elements) {
+  let station = null;
+  const near = [];
+  for (const e of elements) {
+    const t = e.tags || {};
+    const name = t['name:ja'] || t.name;
+    if (!name) continue;
+    const pos = e.lat != null ? { lat: e.lat, lon: e.lon } : e.center ? { lat: e.center.lat, lon: e.center.lon } : null;
+    if (t.railway === 'station' || t.railway === 'halt') {
+      if (!pos) continue;
+      const m = distKm(s, pos) * 1000;
+      if (!station || m < station.m) station = { name: name.replace(/駅$/, ''), lat: pos.lat, lon: pos.lon, m: Math.round(m) };
+      continue;
+    }
+    const key = ['tourism', 'historic', 'amenity', 'leisure', 'natural', 'place', 'aeroway'].find(k => t[k]);
+    if (!key) continue;
+    // An enclosing area (no position) counts as being right there.
+    near.push({ properties: { name, osm_key: key, osm_value: t[key], extent: pos ? undefined : [0, 0, 0, 0] }, geometry: { coordinates: pos ? [pos.lon, pos.lat] : [s.lon, s.lat] } });
+  }
+  return { station, near };
 }
 
 /** The best name for a stop from nearby named features. */
@@ -146,22 +192,27 @@ export async function spots(list, needStation = new Set(), onEach) {
   const out = await cachedSpots(list);
   for (const s of list) {
     if (out[s.key]) continue;
-    const near = await photon(s.lat, s.lon, 'radius=0.3&limit=20');
-    if (!near) continue;
-    let station = null;
-    if (needStation.has(s.key)) {
+    const want = needStation.has(s.key);
+    let near = await photon(s.lat, s.lon, 'radius=0.3&limit=20');
+    let station = null, ok = !!near;
+    if (near && want) {
       const st = await photon(s.lat, s.lon, 'radius=0.8&limit=5&osm_tag=railway:station&osm_tag=railway:halt');
-      if (!st) continue;
-      for (const f of st) {
+      if (!st) ok = false;
+      else for (const f of st) {
         const [x, y] = f.geometry?.coordinates || [];
         if (x == null || !f.properties?.name) continue;
         const m = distKm(s, { lat: y, lon: x }) * 1000;
         if (m <= 800 && (!station || m < station.m)) station = { name: f.properties.name.replace(/駅$/, ''), lat: y, lon: x, m: Math.round(m) };
       }
     }
+    if (!ok) {
+      const els = await overpassOne(s, want);
+      if (!els) continue;
+      ({ station, near } = fromOverpass(s, els));
+    }
     let landmark = pickLandmark(near, s);
     if (!landmark && station && station.m <= 120) landmark = `${station.name}駅`;
-    const v = { station, landmark, checkedStation: needStation.has(s.key) };
+    const v = { station, landmark, checkedStation: want };
     out[s.key] = v;
     db.cacheSet(`p:${r4(s.lat)},${r4(s.lon)}`, v);
     onEach?.(s.key, v);
