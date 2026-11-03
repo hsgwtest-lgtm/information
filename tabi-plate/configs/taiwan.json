@@ -1,0 +1,29 @@
+{
+ "name": "taiwan",
+ "title": "TAIWAN",
+ "dates": "26.05.02-26.05.06",
+ "local": {
+  "text": "台灣",
+  "x0": 17.0,
+  "x1": 31.0,
+  "h": 9.5
+ },
+ "icons": [
+  {
+   "type": "taipei101",
+   "x": -36
+  },
+  {
+   "type": "temple",
+   "x": -15
+  },
+  {
+   "type": "xiaolongbao",
+   "x": 5.5
+  },
+  {
+   "type": "bubble_tea",
+   "x": 38
+  }
+ ]
+}
