@@ -1,0 +1,31 @@
+{
+ "name": "seoul",
+ "title": "SEOUL",
+ "dates": "26.10.31-26.11.02",
+ "band_text": "KOREA  26.10.31-26.11.02",
+ "horizon": "mountain",
+ "local": {
+  "text": "서울",
+  "x0": 18.5,
+  "x1": 32.5,
+  "h": 12.0
+ },
+ "icons": [
+  {
+   "type": "n_seoul_tower",
+   "x": -34
+  },
+  {
+   "type": "namdaemun",
+   "x": -13
+  },
+  {
+   "type": "fried_chicken",
+   "x": 8.5
+  },
+  {
+   "type": "soju_bottle",
+   "x": 38
+  }
+ ]
+}

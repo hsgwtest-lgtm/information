@@ -1,0 +1,31 @@
+{
+ "name": "busan",
+ "title": "BUSAN",
+ "dates": "27.03.20-27.03.22",
+ "band_text": "KOREA  27.03.20-27.03.22",
+ "horizon": "wave",
+ "local": {
+  "text": "부산",
+  "x0": 15.5,
+  "x1": 27.0,
+  "h": 10.0
+ },
+ "icons": [
+  {
+   "type": "busan_tower",
+   "x": -38
+  },
+  {
+   "type": "gwangan_bridge",
+   "x": -16
+  },
+  {
+   "type": "eomuk",
+   "x": 6
+  },
+  {
+   "type": "gamcheon",
+   "x": 36
+  }
+ ]
+}

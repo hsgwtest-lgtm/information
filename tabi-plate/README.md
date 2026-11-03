@@ -1,5 +1,7 @@
 # 旅の思い出ボックス（hottikis）
 
+前面の文字プレートを「化粧板」と呼ぶ。
+
 旅のたびに、前面のシルエット板だけ作り直して飾る壁掛けボックス。
 箱一式（フレーム・蓋・壁プレート）とシルエットを、Bambu Lab A1 の1プレートで印刷できる。
 
@@ -9,6 +11,7 @@
    - `local`：現地語（例 `台灣`）と置く位置
    - `icons`：モチーフ4つ（下の一覧から選ぶ。なければ `tabi_plate.py` に関数を追加）
    - `dates`：`YY.MM.DD-YY.MM.DD`
+   - 都市版（同じ国の別の街を区別する）：`title` に都市名（SEOUL/BUSAN）、`local` に現地語の都市名（서울/부산）、`band_text` に国名＋日付（`KOREA  26.10.31-26.11.02`）、`horizon` に街の地平線（`mountain`＝山の稜線 / `wave`＝海の波）
 2. `python3 tabi_plate.py configs/<国>.json` → `out/<国>_silhouette.stl`（浮いた部分は自動でブリッジ。1枚につながらないとエラー）
 3. `python3 preview.py <国>` で見た目を確認
 4. 1プレート3MFを作る
@@ -29,4 +32,6 @@
 | 国 | 関数 |
 |---|---|
 | 韓国 | `n_seoul_tower` `namdaemun` `fried_chicken` `soju_bottle` |
+| 釜山 | `busan_tower` `gwangan_bridge` `eomuk` `gamcheon` |
+| 地平線 | `mountain`（ソウル） `wave`（釜山） |
 | 台湾 | `taipei101` `temple` `xiaolongbao` `bubble_tea` |

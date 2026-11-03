@@ -132,7 +132,73 @@ def bubble_tea(x, b=BASE):
         g = g - Point(x+dx, b+dy+0.8).buffer(0.85, 20)                               # タピオカ（穴）
     return g - box(x-3.2, b+11.5, x+3.2, b+12.3)                                     # ミルクティーの境目
 
-ICONS = dict(n_seoul_tower=n_seoul_tower, namdaemun=namdaemun, fried_chicken=fried_chicken, soju_bottle=soju_bottle,
+
+# ---------- 釜山 ----------
+def busan_tower(x, b=BASE):
+    g = unary_union([
+        Polygon([(x-4.5, b-0.5), (x+4.5, b-0.5), (x+3.5, b+2.5), (x-3.5, b+2.5)]),
+        Polygon([(x-1.8, b+2.5), (x+1.8, b+2.5), (x+1.3, b+28), (x-1.3, b+28)]),          # 塔身
+        Polygon([(x-1.3, b+28), (x+1.3, b+28), (x+4.2, b+31.5), (x-4.2, b+31.5)]),          # 蓮の花のように開く展望部
+        box(x-4.2, b+31.5, x+4.2, b+34), Polygon([(x-4.2, b+34), (x+4.2, b+34), (x+2.6, b+36), (x-2.6, b+36)]),
+        Polygon([(x-0.7, b+36), (x+0.7, b+36), (x+0.4, b+42), (x-0.4, b+42)]),
+    ])
+    return g - box(x-3.2, b+32.2, x+3.2, b+33.3)
+
+def gwangan_bridge(x, b=BASE):
+    """広安大橋：2本の主塔と吊りケーブル"""
+    dk = b+4.0
+    g = box(x-15, dk, x+15, dk+1.3)                                     # 橋桁
+    for px in (-14.2, -7, 7, 14.2): g = g | box(x+px-0.8, b-0.5, x+px+0.8, dk)   # 橋脚
+    for tx in (-7, 7):
+        g = g | box(x+tx-0.9, dk, x+tx+0.9, b+18) | box(x+tx-1.6, b+12.5, x+tx+1.6, b+13.5)
+    def cable(x0, y0, x1, y1, sag):
+        t = np.linspace(0, 1, 30); xs = x0+(x1-x0)*t; ys = y0+(y1-y0)*t - sag*4*t*(1-t)
+        return LineString(list(zip(xs, ys))).buffer(0.45)
+    g = g | cable(x-7, b+17.5, x+7, b+17.5, 10.5) | cable(x-15, dk+1.2, x-7, b+17.5, -1.5) | cable(x+7, b+17.5, x+15, dk+1.2, 1.5)
+    for hx in (-4.5, -2, 2, 4.5):                                        # ハンガー
+        t = (hx+7)/14; yc = b+17.5 - 10.5*4*t*(1-t)
+        g = g | box(x+hx-0.35, dk+1.2, x+hx+0.35, yc+0.2)
+    return g
+
+def gamcheon(x, b=BASE):
+    """甘川文化村：坂に重なる小さな家"""
+    hill = Polygon([(x-8, b-0.5), (x+8, b-0.5), (x+8, b+5), (x-8, b+0.5)])
+    houses = [(-5.2, 0.0, 5.2, 5.0), (0.2, 1.8, 5.2, 5.8), (5.4, 3.6, 5.0, 5.0), (-2.6, 5.0, 4.8, 4.6), (2.8, 7.6, 4.8, 4.6), (0.0, 12.2, 4.4, 4.2)]
+    g = hill
+    for (dx, y, w, h) in houses:
+        hb = box(x+dx-w/2, b+y-0.5, x+dx+w/2, b+y+h)
+        hb = hb - box(x+dx-w/2+0.9, b+y+h-2.5, x+dx-w/2+2.0, b+y+h-1.2)
+        hb = hb - box(x+dx+w/2-2.0, b+y+h-2.5, x+dx+w/2-0.9, b+y+h-1.2)
+        g = g | hb
+    return g
+
+def eomuk(x, b=BASE):
+    """串おでん（オムク）：紙コップに刺さった波形の練り物2本"""
+    cup = Polygon([(x-4.0, b-0.5), (x+4.0, b-0.5), (x+4.8, b+7), (x-4.8, b+7)])
+    g = cup - box(x-3.4, b+4.6, x+3.4, b+5.3)
+    for (sx, ang, top) in ((-1.6, 10, 19), (1.8, -12, 21)):
+        stick = LineString([(x+sx, b+6), (x+sx+np.sin(np.radians(-ang))*top*0.5, b+top+1.5)]).buffer(0.5, cap_style=2)
+        yy = np.linspace(b+8.5, b+18.5, 60)                                     # 波形に折った練り物
+        xx = x+sx+2.0*np.sin((yy-b)*np.pi/2.2)+np.sin(np.radians(-ang))*(yy-b-6)*0.5
+        cake = LineString(list(zip(xx, yy))).buffer(1.15, join_style=1)
+        g = g | stick | cake
+    return g
+
+def horizon_mountain(b):
+    """ソウル：山の稜線（北漢山・南山）"""
+    xs = [-48, -45, -42, -40, -29.5, -27, -25.2, -23, 12.5, 14.5, 16.5, 34, 42.5, 45, 48]
+    ys = [1.2, 4.0, 2.2, 0.4, 0.4, 3.6, 1.2, 0.3, 0.3, 3.0, 0.4, 0.3, 0.3, 2.8, 1.2]
+    return Polygon([(-48, b-0.5)]+[(xx, b+yy) for xx, yy in zip(xs, ys)]+[(48, b-0.5)])
+
+def horizon_wave(b):
+    """釜山：海の波"""
+    xs = np.linspace(-48, 48, 400); ys = b+1.4+1.0*np.sin(xs/48*np.pi*9)
+    g = Polygon([(-48, b-0.5)]+list(zip(xs, ys))+[(48, b-0.5)])
+    return g
+
+HORIZON = dict(mountain=horizon_mountain, wave=horizon_wave)
+
+ICONS = dict(busan_tower=busan_tower, gwangan_bridge=gwangan_bridge, gamcheon=gamcheon, eomuk=eomuk, n_seoul_tower=n_seoul_tower, namdaemun=namdaemun, fried_chicken=fried_chicken, soju_bottle=soju_bottle,
              taipei101=taipei101, temple=temple, xiaolongbao=xiaolongbao, bubble_tea=bubble_tea)
 
 # ================= 組み立て =================
@@ -181,11 +247,14 @@ def build(cfg):
     # 左右の溝に隠れる柱で上下の帯をつなぐ（正面からは見えない）
     G = G | box(-W2, BOT_TOP-0.1, -45.6, topbar[0]+0.1) | box(45.6, BOT_TOP-0.1, W2, topbar[0]+0.1)
     G = G | fit(tg, -w/2, w/2, y0, y1)
+    if cfg.get('horizon'):                     # 地平線（街の性格：山・海など）
+        G = G | HORIZON[cfg['horizon']](base)
     for it in cfg['icons']:
         G = G | ICONS[it['type']](it['x'], b=base)
     L = cfg['local']
     G = G | fit(text_geom(L['text']), L['x0'], L['x1'], base-0.4, base+L.get('h', 12.0), keep_aspect=True)
-    G = G - fit(text_geom(cfg['dates']), -30, 30, -44.0, -39.3, keep_aspect=True)
+    band = cfg.get('band_text', cfg['dates'])  # 下の帯（日付。都市版は国名も入れる）
+    G = G - fit(text_geom(band), -40, 40, -44.0, -39.3, keep_aspect=True)
     return connect(G).buffer(0)
 
 if __name__ == '__main__':
