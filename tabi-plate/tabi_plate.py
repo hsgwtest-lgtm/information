@@ -162,16 +162,29 @@ def connect(G, bw=BRIDGE):
         G = G | box(x-bw/2, ya-0.3, x+bw/2, yb+0.3)
     return G
 
+TITLE_H_MAX = 23.6      # 英字の最大の高さ（KOREAの基準）
+SQUEEZE_MIN = 0.85      # 横方向に縮めてよい限度。これより長い単語は、文字の高さを下げて上の帯ごと下ろす
+
+def layout(title):
+    """英字は常に上下の帯に接する。長い単語は上の帯を下げて調整する"""
+    g = text_geom(title); b = g.bounds; ar = (b[2]-b[0])/(b[3]-b[1])
+    h = min(TITLE_H_MAX, 88.0/(ar*SQUEEZE_MIN))
+    w = min(88.0, h*ar)                        # 短い単語は無理に横へ伸ばさない
+    y0 = BOT_TOP-0.6; y1 = y0+h
+    topbar = (y1-0.6, y1-0.6+4.0)
+    return g, w, y0, y1, topbar
+
 def build(cfg):
-    G = box(-W2, YB0, W2, BOT_TOP) | box(-W2, TOPBAR[0], W2, TOPBAR[1])
+    tg, w, y0, y1, topbar = layout(cfg['title'])
+    base = topbar[1]
+    G = box(-W2, YB0, W2, BOT_TOP) | box(-W2, topbar[0], W2, topbar[1])
     # 左右の溝に隠れる柱で上下の帯をつなぐ（正面からは見えない）
-    G = G | box(-W2, BOT_TOP-0.1, -45.6, TOPBAR[0]+0.1) | box(45.6, BOT_TOP-0.1, W2, TOPBAR[0]+0.1)
-    gap = cfg.get('title_gap_top', 0.0)   # >0 にするとタイトル上端を帯から離す（Tなどの横棒が帯に埋もれない）
-    G = G | fit(text_geom(cfg['title']), -44, 44, BOT_TOP-0.6, TOPBAR[0]+0.6-gap)
+    G = G | box(-W2, BOT_TOP-0.1, -45.6, topbar[0]+0.1) | box(45.6, BOT_TOP-0.1, W2, topbar[0]+0.1)
+    G = G | fit(tg, -w/2, w/2, y0, y1)
     for it in cfg['icons']:
-        G = G | ICONS[it['type']](it['x'])
+        G = G | ICONS[it['type']](it['x'], b=base)
     L = cfg['local']
-    G = G | fit(text_geom(L['text']), L['x0'], L['x1'], BASE-0.4, BASE+L.get('h', 12.0), keep_aspect=True)
+    G = G | fit(text_geom(L['text']), L['x0'], L['x1'], base-0.4, base+L.get('h', 12.0), keep_aspect=True)
     G = G - fit(text_geom(cfg['dates']), -30, 30, -44.0, -39.3, keep_aspect=True)
     return connect(G).buffer(0)
 
