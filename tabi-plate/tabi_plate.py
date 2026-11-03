@@ -326,6 +326,122 @@ HORIZON.update(lake=horizon_lake, sunset=horizon_sunset)
 ICONS = dict(hanoi_flag_tower=hanoi_flag_tower, one_pillar_pagoda=one_pillar_pagoda, scooter=scooter, pho_bowl=pho_bowl, rizal_monument=rizal_monument, manila_cathedral=manila_cathedral, jeepney=jeepney, palm_tree=palm_tree, magellans_cross=magellans_cross, lechon=lechon, mango=mango, busan_tower=busan_tower, gwangan_bridge=gwangan_bridge, gamcheon=gamcheon, eomuk=eomuk, n_seoul_tower=n_seoul_tower, namdaemun=namdaemun, fried_chicken=fried_chicken, soju_bottle=soju_bottle,
              taipei101=taipei101, temple=temple, xiaolongbao=xiaolongbao, bubble_tea=bubble_tea)
 
+
+# ---------- セブ：ジンベイザメとカジノ ----------
+def _bez(P, t):
+    P = np.array(P, float); t = np.asarray(t)[:, None]
+    return (1-t)**3*P[0] + 3*(1-t)**2*t*P[1] + 3*(1-t)*t**2*P[2] + t**3*P[3]
+
+def whale_shark(x, b=BASE):
+    """波から弧を描いて跳び上がるジンベイザメ（尾は波しぶきの中、頭は右上）"""
+    P = [(x-20, b+1.5), (x-17, b+20), (x-8, b+38), (x+11, b+38.5)]
+    t = np.linspace(0, 1, 200); C = _bez(P, t)
+    d = np.gradient(C, axis=0); d /= np.linalg.norm(d, axis=1)[:, None]
+    n = np.stack([-d[:, 1], d[:, 0]], 1)            # 左法線＝背中側
+    w = np.interp(t, [0, 0.12, 0.35, 0.6, 0.8, 0.93, 1.0], [1.0, 1.9, 4.0, 5.8, 6.4, 6.2, 5.6])
+    L = C + n*w[:, None]; R = C - n*w[:, None]
+    body = Polygon(list(map(tuple, L)) + list(map(tuple, R[::-1]))).buffer(0)
+    # 平たく四角い頭の先（角を丸める）
+    e = C[-1]; de = d[-1]; ne = n[-1]
+    nose = Polygon([tuple(e+ne*5.6), tuple(e+ne*4.6+de*2.0), tuple(e-ne*4.4+de*2.0), tuple(e-ne*5.6)]).buffer(0.8).buffer(-0.8)
+    body = unary_union([body, nose])
+    def at(tt, off):
+        i = int(tt*199); return C[i] + n[i]*off, d[i], n[i]
+    # 三日月形の尾びれ（上葉が長い）
+    p, dd, nn = at(0.0, 0)
+    up = p - dd*4.5 - nn*8.5; lo = p - dd*3.0 + nn*5.5
+    tail = Polygon([tuple(p+dd*2.5+nn*1.3), tuple(lo), tuple(p-dd*0.8), tuple(up), tuple(p+dd*2.5-nn*1.3)]).buffer(0.35)
+    # 第1背びれ・第2背びれ
+    p, dd, nn = at(0.50, 5.0)
+    dors = Polygon([tuple(p+dd*3.4-nn*1.2), tuple(p-dd*3.4+nn*6.2), tuple(p-dd*3.2-nn*1.2)])
+    p2, dd2, nn2 = at(0.24, 3.0)
+    dors2 = Polygon([tuple(p2+dd2*1.8-nn2*0.8), tuple(p2-dd2*2.0+nn2*3.0), tuple(p2-dd2*1.8-nn2*0.8)])
+    # 胸びれ（腹側へ後ろ向きに）
+    p, dd, nn = at(0.74, -5.6)
+    pect = Polygon([tuple(p+dd*3.0+nn*1.2), tuple(p-dd*6.5-nn*6.0), tuple(p-dd*1.5+nn*1.2)])
+    g = unary_union([body, tail, dors, dors2, pect])
+    # 横長の大きな口（頭の先端に切り込み）、目、えら
+    tip = e + de*2.0
+    mouth = Polygon([tuple(tip+de*1 - ne*0.6), tuple(tip+de*1 - ne*2.0), tuple(tip - de*4.5 - ne*1.8)]).buffer(0.25)
+    eye = Point(*(e - de*3.2 + ne*2.4)).buffer(0.8, 16)
+    gills = unary_union([LineString([tuple(C[i]+n[i]*3.6), tuple(C[i]-n[i]*4.0)]).buffer(0.32) for i in (int(0.86*199), int(0.83*199), int(0.80*199))])
+    g = g - mouth - eye - gills
+    # 白い斑点と縞（ジンベイザメの水玉模様）
+    inner = body.buffer(-1.2)
+    for tt in np.linspace(0.16, 0.76, 13):
+        i = int(tt*199); k = int(round(tt*20)) % 2
+        m = 2 if w[i] < 3 else 4
+        for s in np.linspace(-0.68, 0.68, m) + (0.17 if k else -0.0)*(m > 2):
+            q = C[i] + n[i]*w[i]*s
+            spot = Point(*q).buffer(0.5 + 0.3*w[i]/6.4, 16)
+            if inner.contains(spot): g = g - spot
+    # 頭の上の細かい点
+    for (u, v) in ((-6.5, 3.4), (-6.0, 0.6), (-8.4, 2.0), (-9.0, 4.6), (-8.4, -0.8)):
+        spot = Point(*(e + de*u + ne*v)).buffer(0.5, 12)
+        if inner.contains(spot): g = g - spot
+    # 水しぶき：尾の入水点から王冠状に
+    base0 = np.array([x-20.0, b+1.0]); sp = []
+    for ang, Lh, wb in ((158, 6.5, 1.1), (128, 8.0, 1.2), (52, 8.0, 1.2), (24, 6.5, 1.1)):
+        a = np.radians(ang); tipp = base0 + np.array([np.cos(a), np.sin(a)])*Lh
+        sp.append(Polygon([tuple(base0 + np.array([-wb*1.6, 0])), tuple(tipp), tuple(base0 + np.array([wb*1.6, 0]))]))
+        sp.append(Point(*tipp).buffer(0.85, 12))
+    return unary_union([g] + sp)
+
+def _card(cx, cy, w, h, ang, suit):
+    c = box(-w/2+1, -h/2+1, w/2-1, h/2-1).buffer(1.0, 8)
+    c = c - box(-w/2+1.0, -h/2+1.0, w/2-1.0, h/2-1.0).buffer(1.0, 8).buffer(-0.7)   # 縁取り
+    c = c | suit
+    return affinity.translate(affinity.rotate(c, ang, origin=(0, 0)), cx, cy)
+
+def _spade(s=1.0):
+    h = unary_union([Point(-1.6*s, 0).buffer(2.0*s, 32), Point(1.6*s, 0).buffer(2.0*s, 32),
+                     Polygon([(-3.55*s, -0.3*s), (3.55*s, -0.3*s), (0, 4.6*s)])])
+    return unary_union([h, Polygon([(0, -0.5*s), (-1.8*s, -3.6*s), (1.8*s, -3.6*s)])])
+
+def _heart(s=1.0):
+    return unary_union([Point(-1.5*s, 0.6*s).buffer(1.9*s, 32), Point(1.5*s, 0.6*s).buffer(1.9*s, 32),
+                        Polygon([(-3.3*s, 0.0), (3.3*s, 0.0), (0, -4.2*s)])])
+
+def casino_cards(x, b=BASE):
+    """トランプの扇（A♠とA♥）"""
+    a = _card(x-3.2, b+10.0, 12, 17, 16, affinity.translate(_heart(0.95), 0, 0.6))
+    a_txt = fit(text_geom('A'), -5.2, -2.6, 4.0, 7.4, keep_aspect=True)
+    s = _card(x+2.6, b+10.4, 12, 17, -12, affinity.translate(_spade(1.05), 0, 0.2))
+    s_txt = fit(text_geom('A'), -5.2, -2.6, 4.0, 7.4, keep_aspect=True)
+    a = a | affinity.translate(affinity.rotate(a_txt, 16, origin=(0, 0)), x-3.2, b+10.0)
+    s = s | affinity.translate(affinity.rotate(s_txt, -12, origin=(0, 0)), x+2.6, b+10.4)
+    # 後ろのカードは前のカードと重なる部分を消してから重ねる（前のカードの縁＝隙間0.6）
+    a = a - s.buffer(0.6).buffer(0)
+    front_mask = affinity.translate(affinity.rotate(box(-6, -8.5, 6, 8.5), -12, origin=(0, 0)), x+2.6, b+10.4)
+    return unary_union([a, s, box(x-6, b-0.5, x+6, b+2.0)]) | front_mask.intersection(box(-99, b-0.5, 99, b+2.5))
+
+def chip_stack(x, b=BASE):
+    """カジノチップの山と、立てかけた1枚"""
+    g = []
+    for k in range(5):
+        y = b + k*2.2; dx = (0.5 if k % 2 else -0.4)
+        ch = box(x-5+dx, y-0.2 if k else b-0.5, x+5+dx, y+1.9)
+        for sx in (-3.0, 0, 3.0): ch = ch - box(x+dx+sx-0.6, y+0.4, x+dx+sx+0.6, y+1.3)
+        g.append(ch)
+    stack = unary_union(g)
+    face = Point(x+1.0, b+16.4).buffer(5.2, 64)
+    face = face - Point(x+1.0, b+16.4).buffer(3.6, 64).difference(Point(x+1.0, b+16.4).buffer(2.9, 64)).buffer(0)
+    for k in range(8):
+        a = np.radians(k*45+22.5)
+        face = face - affinity.rotate(box(x+1.0+4.25-0.55, b+16.4-0.75, x+1.0+5.3, b+16.4+0.75), k*45+22.5, origin=(x+1.0, b+16.4))
+    face = face - fit(text_geom('$'), x-0.4, x+2.4, b+14.4, b+18.4, keep_aspect=True)
+    return unary_union([stack, face])
+
+def dice(x, b=BASE):
+    d = affinity.rotate(box(x-3.6, b+0.0, x+3.6, b+7.2).buffer(0.8, 8).buffer(-0.8, 8), 12, origin=(x, b+0.3))
+    c = d.centroid
+    for px, py in ((-1.9, 1.9), (0, 0), (1.9, -1.9), (-1.9, -1.9), (1.9, 1.9)):
+        q = affinity.rotate(Point(c.x+px, c.y+py), 12, origin=(c.x, c.y))
+        d = d - q.buffer(0.75, 16)
+    return d | box(x-3.5, b-0.5, x+3.0, b+1.0)
+
+ICONS.update(whale_shark=whale_shark, casino_cards=casino_cards, chip_stack=chip_stack, dice=dice)
+
 # ================= 組み立て =================
 def connect(G, bw=BRIDGE):
     for _ in range(400):

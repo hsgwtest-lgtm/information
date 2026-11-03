@@ -2,30 +2,30 @@
  "name": "cebu",
  "title": "CEBU",
  "dates": "00.00.00-00.00.00",
- "band_text": "PHILIPPINES  00.00.00-00.00.00",
+ "band_text": "PHILIPPINES",
  "horizon": "wave",
  "local": {
   "text": "Sugbo",
-  "x0": 25.5,
-  "x1": 35.5,
-  "h": 6.5
+  "x0": 2.5,
+  "x1": 14.0,
+  "h": 5.5
  },
  "icons": [
   {
-   "type": "palm_tree",
-   "x": -37
+   "type": "dice",
+   "x": -38.5
   },
   {
-   "type": "magellans_cross",
-   "x": -13
+   "type": "whale_shark",
+   "x": -9
   },
   {
-   "type": "lechon",
-   "x": 9.0
+   "type": "casino_cards",
+   "x": 24
   },
   {
-   "type": "mango",
-   "x": 41
+   "type": "chip_stack",
+   "x": 39.5
   }
  ]
 }
