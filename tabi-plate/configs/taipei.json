@@ -5,27 +5,28 @@
  "band_text": "TAIWAN  26.05.02-26.05.06",
  "horizon": "mountain",
  "local": {
-  "text": "臺北",
-  "x0": 17.0,
-  "x1": 31.0,
-  "h": 9.5
+  "text": "台北",
+  "x0": 18.5,
+  "x1": 34.2,
+  "h": 9.0,
+  "keep_aspect": false
  },
  "icons": [
   {
    "type": "taipei101",
-   "x": -36
+   "x": -38
   },
   {
-   "type": "temple",
-   "x": -15
+   "type": "jiufen",
+   "x": -14
   },
   {
-   "type": "xiaolongbao",
-   "x": 5.5
+   "type": "sky_lanterns",
+   "x": 10.0
   },
   {
    "type": "bubble_tea",
-   "x": 38
+   "x": 39
   }
  ]
 }

@@ -90,7 +90,7 @@ def taipei101(x, b=BASE):
     # 節の切れ目（細い横スリット：穴だが島にならないよう端は閉じない）
     yy = b+10
     for i in range(8):
-        g = g - box(x-2.2, yy+3.2-0.35, x+2.2, yy+3.2+0.35); yy += 3.2
+        g = g - box(x-2.0, yy+3.2-0.45, x+2.0, yy+3.2+0.45); yy += 3.2
     g = g - Point(x, b+6.5).buffer(1.1, 24)   # 中段の円形装飾（穴）
     return g
 
@@ -128,9 +128,9 @@ def bubble_tea(x, b=BASE):
         Point(x, b+16.2).buffer(4.2, 48).intersection(box(x-5, b+16.2, x+5, b+21)),  # ドーム蓋
         LineString([(x+0.5, b+19), (x+3.8, b+27)]).buffer(0.9, cap_style=2),         # ストロー
     ])
-    for (dx, dy) in [(-2.2, 1.6), (0.2, 1.4), (2.4, 1.8), (-1.2, 3.8), (1.3, 3.9), (-2.6, 6.0), (0, 6.2), (2.6, 6.1)]:
+    for (dx, dy) in [(-1.6, 1.6), (1.6, 1.8), (-0.1, 4.0), (-2.4, 6.9), (2.4, 6.9)]:
         g = g - Point(x+dx, b+dy+0.8).buffer(0.85, 20)                               # タピオカ（穴）
-    return g - box(x-3.2, b+11.5, x+3.2, b+12.3)                                     # ミルクティーの境目
+    return g - box(x-3.2, b+11.4, x+3.2, b+12.4)                                     # ミルクティーの境目
 
 
 # ---------- 釜山 ----------
@@ -459,6 +459,63 @@ def dice(x, b=BASE):
 
 ICONS.update(whale_shark=whale_shark, casino_cards=casino_cards, chip_stack=chip_stack, dice=dice)
 
+
+# ---------- 台北：九份の提灯・十分の天燈 ----------
+def _lantern(cx, top, r=2.3):
+    """九份の赤い丸提灯（吊り紐の下にぶら下がる）。線もすき間も0.9mm以上"""
+    cy = top - 1.0 - r*1.15
+    body = affinity.scale(Point(cx, cy).buffer(1, 48), r, r*1.15)
+    body = body - box(cx-0.45, cy-r*0.75, cx+0.45, cy+r*0.75)          # 縦の白い骨（中央1本）
+    caps = box(cx-r*0.6, cy+r*1.15-0.6, cx+r*0.6, top-0.3) | box(cx-r*0.6, cy-r*1.15-1.0, cx+r*0.6, cy-r*1.15+0.6)
+    tassel = box(cx-0.5, cy-r*1.15-2.6, cx+0.5, cy-r*1.15-0.9)
+    string = box(cx-0.5, top-1.2, cx+0.5, top+0.2)
+    return unary_union([body, caps, tassel, string])
+
+def jiufen(x, b=BASE):
+    """九份の茶楼：反り屋根の3層の建物と、軒下に並ぶ赤い提灯"""
+    g = unary_union([
+        box(x-12, b-0.5, x+12, b+1.5),                                      # 石段
+        box(x-10, b+1.5, x+10, b+10.5),                                     # 1階
+        Polygon([(x-14, b+13.6), (x-12, b+10.5), (x+12, b+10.5), (x+14, b+13.6), (x+9, b+12.6), (x-9, b+12.6)]),
+        box(x-8, b+12.6, x+8, b+19.5),                                      # 2階
+        Polygon([(x-12, b+22.4), (x-10, b+19.5), (x+10, b+19.5), (x+12, b+22.4), (x+7, b+21.5), (x-7, b+21.5)]),
+        box(x-5.5, b+21.5, x+5.5, b+26.5),                                  # 3階
+        Polygon([(x-9, b+29.2), (x-7.5, b+26.5), (x+7.5, b+26.5), (x+9, b+29.2), (x+4.5, b+28.4), (x-4.5, b+28.4)]),
+    ])
+    # 窓（白抜き：すき間1mm以上）
+    for dx in (-6.5, -2.2, 2.2, 6.5): g = g - box(x+dx-1.2, b+4.2, x+dx+1.2, b+7.6)
+    for dx in (-4.2, 0, 4.2): g = g - box(x+dx-1.1, b+14.6, x+dx+1.1, b+17.4)
+    g = g - box(x-1.6, b+23.0, x+1.6, b+25.4)
+    # 軒下の提灯（屋根の下端からぶら下げる）
+    L = [_lantern(x+dx, b+10.6, 1.9) for dx in (-13.3, 13.3)]
+    L += [_lantern(x+dx, b+19.6, 1.8) for dx in (-11.0, 11.0)]
+    L += [_lantern(x+dx, b+26.6, 1.7) for dx in (-8.0, 8.0)]
+    # 正面の提灯の列（1階の上に一列）
+    return unary_union([g] + L)
+
+def _sky_lantern(cx, cy, s=1.0, tilt=0):
+    """十分の天燈：上が広く丸い紙の灯籠（枠と骨だけ残して紙を白く抜く）＋下に灯る火"""
+    w0, w1, h = 3.0*s, 4.2*s, 10.5*s
+    outer = Polygon([(cx-w0, cy), (cx+w0, cy), (cx+w1, cy+h), (cx-w1, cy+h)])
+    outer = outer | affinity.scale(Point(cx, cy+h).buffer(1, 48), w1, 1.8*s).intersection(box(cx-w1, cy+h, cx+w1, cy+h+2*s))
+    outer = outer.buffer(0.6).buffer(-0.6)
+    paper = outer.buffer(-1.1)
+    ribs = box(cx-0.55, cy, cx+0.55, cy+h+2*s) | box(cx-w1, cy+h*0.55-0.55, cx+w1, cy+h*0.55+0.55)
+    lan = outer - (paper - ribs)
+    flame = unary_union([Point(cx, cy-2.0*s).buffer(1.2*s, 24), Polygon([(cx-1.05*s, cy-1.8*s), (cx+1.05*s, cy-1.8*s), (cx, cy+0.3)])])
+    return affinity.rotate(lan | flame, tilt, origin=(cx, cy))
+
+def sky_lanterns(x, b=BASE):
+    """十分の天燈：線路から重なり合いながら空へ昇る3つの天燈"""
+    rail = unary_union([box(x-7, b-0.5, x+7, b+1.0)] + [box(x+dx-0.7, b+1.0, x+dx+0.7, b+2.2) for dx in (-5, -1.7, 1.7, 5)]
+                       + [box(x-7, b+2.2, x+7, b+3.2)])
+    A = _sky_lantern(x-2.2, b+5.6, 1.1, 4)
+    B = _sky_lantern(x+4.0, b+15.0, 0.95, -8)
+    C = _sky_lantern(x+0.2, b+24.6, 0.8, 9)
+    return unary_union([rail, A, B, C]).buffer(0.45).buffer(-0.45)
+
+ICONS.update(jiufen=jiufen, sky_lanterns=sky_lanterns)
+
 # ================= 組み立て =================
 def connect(G, bw=BRIDGE):
     for _ in range(400):
@@ -510,7 +567,8 @@ def build(cfg):
     for it in cfg['icons']:
         G = G | ICONS[it['type']](it['x'], b=base)
     L = cfg['local']
-    G = G | fit(text_geom(L['text']), L['x0'], L['x1'], base-0.4, base+L.get('h', 12.0), keep_aspect=True)
+    LT = fit(text_geom(L['text']), L['x0'], L['x1'], base-0.4, base+L.get('h', 12.0), keep_aspect=L.get('keep_aspect', True))
+    G = G | LT
     band = cfg.get('band_text', cfg['dates'])  # 下の帯（日付。都市版は国名も入れる）
     G = G - fit(text_geom(band), -40, 40, -44.0, -39.3, keep_aspect=True)
     return connect(G).buffer(0)
