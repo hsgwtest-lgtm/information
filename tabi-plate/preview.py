@@ -11,7 +11,7 @@ def patch(g, **kw):
             c=np.asarray(ring.coords); verts+=list(c); codes+=[Path.MOVETO]+[Path.LINETO]*(len(c)-2)+[Path.CLOSEPOLY]
     return PathPatch(Path(verts,codes),**kw)
 names=sys.argv[1:]
-fig,axs=plt.subplots(1,len(names),figsize=(7*len(names),7.4))
+cols=min(len(names),2); rows=(len(names)+1)//2; fig,axs=plt.subplots(rows,cols,figsize=(7*cols,7.2*rows)); axs=np.atleast_1d(axs).ravel()
 for ax,n in zip(np.atleast_1d(axs),names):
     G=pickle.load(open(f'out/{n}.pkl','rb'))
     ax.add_patch(patch(G,fc='#151515',ec='none'))

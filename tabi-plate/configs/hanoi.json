@@ -1,0 +1,31 @@
+{
+ "name": "hanoi",
+ "title": "HANOI",
+ "dates": "00.00.00-00.00.00",
+ "band_text": "VIETNAM  00.00.00-00.00.00",
+ "horizon": "lake",
+ "local": {
+  "text": "Hà Nội",
+  "x0": 15.0,
+  "x1": 29.5,
+  "h": 8.5
+ },
+ "icons": [
+  {
+   "type": "hanoi_flag_tower",
+   "x": -38
+  },
+  {
+   "type": "one_pillar_pagoda",
+   "x": -17
+  },
+  {
+   "type": "scooter",
+   "x": 2
+  },
+  {
+   "type": "pho_bowl",
+   "x": 37.5
+  }
+ ]
+}

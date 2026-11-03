@@ -1,0 +1,31 @@
+{
+ "name": "taipei",
+ "title": "TAIPEI",
+ "dates": "26.05.02-26.05.06",
+ "band_text": "TAIWAN  26.05.02-26.05.06",
+ "horizon": "mountain",
+ "local": {
+  "text": "臺北",
+  "x0": 17.0,
+  "x1": 31.0,
+  "h": 9.5
+ },
+ "icons": [
+  {
+   "type": "taipei101",
+   "x": -36
+  },
+  {
+   "type": "temple",
+   "x": -15
+  },
+  {
+   "type": "xiaolongbao",
+   "x": 5.5
+  },
+  {
+   "type": "bubble_tea",
+   "x": 38
+  }
+ ]
+}

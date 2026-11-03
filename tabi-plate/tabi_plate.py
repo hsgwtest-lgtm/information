@@ -198,7 +198,132 @@ def horizon_wave(b):
 
 HORIZON = dict(mountain=horizon_mountain, wave=horizon_wave)
 
-ICONS = dict(busan_tower=busan_tower, gwangan_bridge=gwangan_bridge, gamcheon=gamcheon, eomuk=eomuk, n_seoul_tower=n_seoul_tower, namdaemun=namdaemun, fried_chicken=fried_chicken, soju_bottle=soju_bottle,
+# ---------- ハノイ ----------
+def hanoi_flag_tower(x, b=BASE):
+    """ハノイ国旗掲揚塔（3段の台座＋八角塔＋旗）"""
+    g = unary_union([box(x-6, b-0.5, x+6, b+3), box(x-4.6, b+3, x+4.6, b+6), box(x-3.4, b+6, x+3.4, b+8.5),
+                     Polygon([(x-2.2, b+8.5), (x+2.2, b+8.5), (x+1.8, b+24), (x-1.8, b+24)]),
+                     box(x-2.6, b+24, x+2.6, b+25.5), box(x-1.6, b+25.5, x+1.6, b+27.5),
+                     box(x-0.45, b+27.5, x+0.45, b+40),
+                     Polygon([(x+0.4, b+39.8), (x+7.5, b+38.3), (x+7.0, b+35.6), (x+0.4, b+35.0)])])  # 旗
+    for yy in (12, 16, 20): g = g - box(x-0.6, b+yy, x+0.6, b+yy+1.6)      # 窓
+    return g - box(x-1.4, b-0.5, x+1.4, b+2.2)
+
+def one_pillar_pagoda(x, b=BASE):
+    """一柱寺：池から立つ1本の柱の上のお堂"""
+    g = unary_union([box(x-9, b-0.5, x+9, b+1.4),                          # 池
+                     Polygon([(x-1.3, b+1.4), (x+1.3, b+1.4), (x+1.0, b+7.5), (x-1.0, b+7.5)]),   # 1本柱
+                     Polygon([(x-3.6, b+7.5), (x+3.6, b+7.5), (x+5.4, b+9.2), (x-5.4, b+9.2)]),   # 柱の上の受け
+                     box(x-4.4, b+9.2, x+4.4, b+12.6),                      # お堂
+                     roof(x, b+12.2, 17, 5.0, 1.8), Point(x, b+17.6).buffer(1.0, 16)])
+    g = g - box(x-2.8, b+9.8, x+2.8, b+11.8)
+    return g - box(x-7.5, b+0.3, x+7.5, b+0.8)
+
+def scooter(x, b=BASE):
+    """ハノイのバイク（ベスパ型スクーター）"""
+    wr, wf = (x-5.8, b+2.4), (x+6.0, b+2.4)
+    body = unary_union([affinity.scale(Point(x-4.6, b+5.6).buffer(1, 48), 4.6, 3.4),       # 後ろの丸いボディ
+                        box(x-2.0, b+2.8, x+4.2, b+4.4),                                       # 足元
+                        Polygon([(x+3.2, b+2.8), (x+5.6, b+3.4), (x+6.4, b+10.5), (x+4.6, b+11.0), (x+3.4, b+4.4)]),  # 前の盾
+                        Point(x+6.0, b+3.6).buffer(2.4, 32).intersection(box(x+3, b+3.6, x+9, b+7))])  # 前フェンダー
+    g = unary_union([Point(wr).buffer(2.4, 32), Point(wf).buffer(2.4, 32), body,
+                     affinity.scale(Point(x-4.4, b+9.4).buffer(1, 32), 3.6, 0.9),             # シート
+                     box(x+3.2, b+10.6, x+8.2, b+11.6), Point(x+7.2, b+12.2).buffer(0.9, 16),  # ハンドルとライト
+                     box(x-1.0, b-0.5, x+1.0, b+3.0)])
+    for c in (wr, wf): g = g - Point(c).buffer(1.0, 24)
+    return g
+
+def pho_bowl(x, b=BASE):
+    bowl = Point(x, b+7).buffer(7, 64).intersection(box(x-7.5, b+1.5, x+7.5, b+7))
+    g = unary_union([box(x-2.5, b-0.5, x+2.5, b+1.6), bowl, box(x-7.6, b+7, x+7.6, b+8.0),
+                     LineString([(x-2, b+8), (x+7.5, b+16)]).buffer(0.5), LineString([(x-0.5, b+8), (x+8.6, b+14.5)]).buffer(0.5)])  # 箸
+    steam = unary_union([LineString([(x+dx, b+9.5), (x+dx+1.0, b+11.5), (x+dx-0.5, b+13.5), (x+dx+0.5, b+15.5)]).buffer(0.55) for dx in (-4.5, -1.5)])
+    return (g | steam) - box(x-5.5, b+3.8, x+5.5, b+4.6)
+
+# ---------- マニラ ----------
+def rizal_monument(x, b=BASE):
+    g = unary_union([box(x-6, b-0.5, x+6, b+2.5), box(x-4.5, b+2.5, x+4.5, b+8.5),
+                     Polygon([(x-2.2, b+8.5), (x+2.2, b+8.5), (x+0.9, b+33), (x-0.9, b+33)]),   # オベリスク
+                     Point(x, b+34).buffer(1.1, 16)])
+    g = g | box(x-1.6, b+8.5, x+1.6, b+13.5)                              # 像
+    return g - box(x-3.2, b+4, x+3.2, b+7)
+
+def manila_cathedral(x, b=BASE):
+    g = unary_union([box(x-10, b-0.5, x+10, b+11), Polygon([(x-10, b+11), (x+10, b+11), (x, b+16)]),
+                     box(x+6.5, b+11, x+10, b+19), Point(x+8.25, b+19).buffer(1.75, 24),       # 鐘楼
+                     Point(x, b+19.5).buffer(3.0, 32).intersection(box(x-3.2, b+15, x+3.2, b+23)), box(x-0.35, b+22, x+0.35, b+26),
+                     box(x-1.3, b+24.3, x+1.3, b+25)])                    # ドームと十字架
+    g = g - (box(x-2.4, b-0.5, x+2.4, b+5) | Point(x, b+5).buffer(2.4, 24))
+    for dx in (-6.5, 6.5): g = g - (box(x+dx-1.2, b+5, x+dx+1.2, b+8) | Point(x+dx, b+8).buffer(1.2, 16))
+    return g - Point(x, b+12.6).buffer(1.4, 24)
+
+def jeepney(x, b=BASE):
+    g = unary_union([Point(x-6, b+2.2).buffer(2.2, 32), Point(x+6, b+2.2).buffer(2.2, 32),
+                     box(x-10, b+2.4, x+7, b+9.5),                        # 客室
+                     Polygon([(x+7, b+2.4), (x+11, b+2.4), (x+11, b+6.4), (x+7, b+7.6)]),  # ボンネット
+                     box(x-10.5, b+9.5, x+7.5, b+10.6),                   # 屋根
+                     Polygon([(x+8.0, b+10.6), (x+11.0, b+12.6), (x+11.0, b+13.4), (x+7.2, b+10.6)]),  # 飾り
+                     box(x-1.0, b-0.5, x+1.0, b+2.6)])
+    for wx in range(-9, 6, 3): g = g - box(x+wx+0.3, b+6.2, x+wx+2.3, b+8.6)   # 窓
+    for c in (-6, 6): g = g - Point(x+c, b+2.2).buffer(0.9, 16)
+    return g
+
+# ---------- セブ ----------
+def palm_tree(x, b=BASE):
+    t = np.linspace(0, 1, 30)
+    trunk = LineString(list(zip(x+3.0*t**2, b-0.5+30*t))).buffer(1.0)
+    top = (x+3.0, b+29.5); leaves = []
+    for ang, L in ((160, 10), (130, 9), (95, 7), (60, 9), (25, 10), (195, 8), (-15, 8)):
+        a = np.radians(ang); pts = [(top[0]+L*s*np.cos(a), top[1]+L*s*np.sin(a)-2.2*s**2*L/6) for s in np.linspace(0, 1, 12)]
+        leaves.append(LineString(pts).buffer(1.1, cap_style=1))
+    return unary_union([trunk, Point(top).buffer(1.6, 16)]+leaves)
+
+def magellans_cross(x, b=BASE):
+    """マゼランクロスの八角堂"""
+    g = unary_union([box(x-9, b-0.5, x+9, b+1.6), box(x-7.5, b+1.6, x+7.5, b+10),
+                     Polygon([(x-10, b+10), (x+10, b+10), (x+5, b+15), (x-5, b+15)]),
+                     box(x-0.6, b+15, x+0.6, b+21), box(x-2.2, b+18.6, x+2.2, b+19.6)])
+    for dx in (-4.2, 0, 4.2):
+        g = g - (box(x+dx-1.4, b+1.6, x+dx+1.4, b+6.5) | Point(x+dx, b+6.5).buffer(1.4, 16))
+    return g
+
+def lechon(x, b=BASE):
+    """レチョン（豚の丸焼き）：串に刺して脚を前後に伸ばした姿"""
+    body = affinity.scale(Point(x, b+7.2).buffer(1, 64), 8.0, 3.6)
+    head = unary_union([Point(x+8.2, b+8.0).buffer(2.8, 32),
+                        Polygon([(x+10.0, b+7.0), (x+13.0, b+6.6), (x+13.2, b+8.6), (x+10.4, b+9.6)])])
+    ear = Polygon([(x+7.0, b+10.2), (x+8.0, b+12.8), (x+9.4, b+10.6)])
+    legs = unary_union([LineString([(x+4.5, b+5.0), (x+9.0, b+3.4)]).buffer(0.9), LineString([(x+2.5, b+4.8), (x+7.0, b+3.0)]).buffer(0.9),
+                        LineString([(x-4.5, b+5.0), (x-9.5, b+3.6)]).buffer(0.9), LineString([(x-2.8, b+4.6), (x-7.8, b+3.0)]).buffer(0.9)])
+    tail = LineString([(x-7.8, b+8.4), (x-9.6, b+9.6), (x-9.0, b+11.0), (x-8.0, b+10.2)]).buffer(0.45)
+    spit = unary_union([LineString([(x-14.5, b+7.6), (x+15, b+7.6)]).buffer(0.5), box(x-14.5, b-0.5, x-13.3, b+7.6), box(x+13.8, b-0.5, x+15.0, b+7.6)])
+    g = unary_union([body, head, ear, legs, tail, spit])
+    g = g - Point(x+9.0, b+8.8).buffer(0.55, 12)
+    for dx in (-4, -1, 2): g = g - LineString([(x+dx-0.6, b+10.0), (x+dx+0.6, b+5.6)]).buffer(0.3)   # 焼き目
+    return g
+
+def mango(x, b=BASE):
+    m = affinity.rotate(affinity.scale(Point(0, 0).buffer(1, 64), 4.0, 5.6), -25)
+    g = unary_union([affinity.translate(m, x, b+6.6), LineString([(x+1.6, b+11.6), (x+2.6, b+13.8)]).buffer(0.6),
+                     affinity.translate(affinity.rotate(affinity.scale(Point(0, 0).buffer(1, 32), 2.8, 1.1), 25), x+4.6, b+13.4)])
+    return g - affinity.translate(affinity.rotate(affinity.scale(Point(0, 0).buffer(1, 24), 0.8, 2.0), -25), x-1.2, b+7.6)
+
+def horizon_lake(b):
+    """ハノイ：湖のさざなみ（低め）"""
+    xs = np.linspace(-48, 48, 400); ys = b+0.9+0.45*np.sin(xs/48*np.pi*16)
+    return Polygon([(-48, b-0.5)]+list(zip(xs, ys))+[(48, b-0.5)])
+
+def horizon_sunset(b):
+    """マニラ湾の夕日：波＋水平線に沈む太陽"""
+    g = horizon_wave(b)
+    sun = Point(36, b+1.0).buffer(7.6, 64).intersection(box(-99, b, 99, b+20)) - Point(36, b+1.0).buffer(6.3, 64)
+    rays = unary_union([LineString([(36+8.8*np.cos(np.radians(a)), b+1+8.8*np.sin(np.radians(a))),
+                                    (36+10.6*np.cos(np.radians(a)), b+1+10.6*np.sin(np.radians(a)))]).buffer(0.55) for a in (30, 60, 90, 120, 150)])
+    return g | sun | rays
+
+HORIZON.update(lake=horizon_lake, sunset=horizon_sunset)
+
+ICONS = dict(hanoi_flag_tower=hanoi_flag_tower, one_pillar_pagoda=one_pillar_pagoda, scooter=scooter, pho_bowl=pho_bowl, rizal_monument=rizal_monument, manila_cathedral=manila_cathedral, jeepney=jeepney, palm_tree=palm_tree, magellans_cross=magellans_cross, lechon=lechon, mango=mango, busan_tower=busan_tower, gwangan_bridge=gwangan_bridge, gamcheon=gamcheon, eomuk=eomuk, n_seoul_tower=n_seoul_tower, namdaemun=namdaemun, fried_chicken=fried_chicken, soju_bottle=soju_bottle,
              taipei101=taipei101, temple=temple, xiaolongbao=xiaolongbao, bubble_tea=bubble_tea)
 
 # ================= 組み立て =================

@@ -1,0 +1,31 @@
+{
+ "name": "cebu",
+ "title": "CEBU",
+ "dates": "00.00.00-00.00.00",
+ "band_text": "PHILIPPINES  00.00.00-00.00.00",
+ "horizon": "wave",
+ "local": {
+  "text": "Sugbo",
+  "x0": 25.5,
+  "x1": 35.5,
+  "h": 6.5
+ },
+ "icons": [
+  {
+   "type": "palm_tree",
+   "x": -37
+  },
+  {
+   "type": "magellans_cross",
+   "x": -13
+  },
+  {
+   "type": "lechon",
+   "x": 9.0
+  },
+  {
+   "type": "mango",
+   "x": 41
+  }
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "name": "manila",
+ "title": "MANILA",
+ "dates": "00.00.00-00.00.00",
+ "band_text": "PHILIPPINES  00.00.00-00.00.00",
+ "horizon": "sunset",
+ "local": {
+  "text": "Maynila",
+  "x0": 13.0,
+  "x1": 25.5,
+  "h": 6.0
+ },
+ "icons": [
+  {
+   "type": "rizal_monument",
+   "x": -38
+  },
+  {
+   "type": "manila_cathedral",
+   "x": -19.5
+  },
+  {
+   "type": "jeepney",
+   "x": 0
+  }
+ ]
+}
