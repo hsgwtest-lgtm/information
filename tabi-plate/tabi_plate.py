@@ -362,9 +362,9 @@ def whale_shark(x, b=BASE):
     g = unary_union([body, tail, dors, dors2, pect])
     # 横長の大きな口（頭の先端に切り込み）、目、えら
     tip = e + de*2.0
-    mouth = Polygon([tuple(tip+de*1 - ne*0.6), tuple(tip+de*1 - ne*2.0), tuple(tip - de*4.5 - ne*1.8)]).buffer(0.25)
+    mouth = Polygon([tuple(tip+de*1 - ne*0.4), tuple(tip+de*1 - ne*2.4), tuple(tip - de*4.5 - ne*1.9)]).buffer(0.3)
     eye = Point(*(e - de*3.2 + ne*2.4)).buffer(0.8, 16)
-    gills = unary_union([LineString([tuple(C[i]+n[i]*3.6), tuple(C[i]-n[i]*4.0)]).buffer(0.32) for i in (int(0.86*199), int(0.83*199), int(0.80*199))])
+    gills = unary_union([LineString([tuple(C[i]+n[i]*3.4), tuple(C[i]-n[i]*3.8)]).buffer(0.5) for i in (int(0.87*199), int(0.83*199), int(0.79*199))])
     g = g - mouth - eye - gills
     # 白い斑点と縞（ジンベイザメの水玉模様）
     inner = body.buffer(-1.2)
@@ -389,7 +389,7 @@ def whale_shark(x, b=BASE):
 
 def _card(cx, cy, w, h, ang, suit):
     c = box(-w/2+1, -h/2+1, w/2-1, h/2-1).buffer(1.0, 8)
-    c = c - box(-w/2+1.0, -h/2+1.0, w/2-1.0, h/2-1.0).buffer(1.0, 8).buffer(-0.7)   # 縁取り
+    c = c - box(-w/2+1.0, -h/2+1.0, w/2-1.0, h/2-1.0).buffer(1.0, 8).buffer(-1.1)   # 縁取り1.1mm
     c = c | suit
     return affinity.translate(affinity.rotate(c, ang, origin=(0, 0)), cx, cy)
 
@@ -403,33 +403,50 @@ def _heart(s=1.0):
                         Polygon([(-3.3*s, 0.0), (3.3*s, 0.0), (0, -4.2*s)])])
 
 def casino_cards(x, b=BASE):
-    """トランプの扇（A♠とA♥）"""
-    a = _card(x-3.2, b+10.0, 12, 17, 16, affinity.translate(_heart(0.95), 0, 0.6))
-    a_txt = fit(text_geom('A'), -5.2, -2.6, 4.0, 7.4, keep_aspect=True)
-    s = _card(x+2.6, b+10.4, 12, 17, -12, affinity.translate(_spade(1.05), 0, 0.2))
-    s_txt = fit(text_geom('A'), -5.2, -2.6, 4.0, 7.4, keep_aspect=True)
-    a = a | affinity.translate(affinity.rotate(a_txt, 16, origin=(0, 0)), x-3.2, b+10.0)
-    s = s | affinity.translate(affinity.rotate(s_txt, -12, origin=(0, 0)), x+2.6, b+10.4)
-    # 後ろのカードは前のカードと重なる部分を消してから重ねる（前のカードの縁＝隙間0.6）
-    a = a - s.buffer(0.6).buffer(0)
-    front_mask = affinity.translate(affinity.rotate(box(-6, -8.5, 6, 8.5), -12, origin=(0, 0)), x+2.6, b+10.4)
-    return unary_union([a, s, box(x-6, b-0.5, x+6, b+2.0)]) | front_mask.intersection(box(-99, b-0.5, 99, b+2.5))
+    """トランプ2枚（黒地にハート・スペードを白抜き）。線もすき間も1mm以上"""
+    def card(cx, cy, ang, suit):
+        c = box(-5.0, -7.5, 5.0, 7.5).buffer(1.0, 8)
+        c = c - affinity.translate(suit(1.05), 0, -0.4)                       # 中央の大きなマーク
+        c = c - affinity.translate(suit(0.42), -3.6, 5.4)                     # 左上の小さなマーク
+        return affinity.translate(affinity.rotate(c, ang, origin=(0, 0)), cx, cy)
+    back = card(x-4.4, b+9.4, 20, _heart)
+    front = card(x+3.6, b+9.8, -10, _spade)
+    back = (back - front.buffer(1.0)).buffer(-0.45).buffer(0.45)              # 重なり部分は1mmのすき間
+    g = unary_union([back, front, box(x-8, b-0.5, x+8, b+1.6)])
+    close = g.buffer(1.0).buffer(-1.0).intersection(box(x-9, b-0.5, x+9, b+4.0))   # 足元の細いすき間を埋める
+    return unary_union([g, close])
+
+def _dollar(cx, cy, hgt):
+    """太線で描いた＄（線1.1mm・すき間1mm以上）"""
+    k = hgt/7.0; lw = 0.55*max(k, 1.0)
+    t = np.linspace(0, 1, 60)
+    # S字：上の弧→斜め→下の弧
+    up = [(cx+1.6*k*np.cos(a), cy+1.6*k+1.2*k*np.sin(a)) for a in np.linspace(np.radians(10), np.radians(270), 40)]
+    lo = [(cx+1.6*k*np.cos(a), cy-1.6*k+1.2*k*np.sin(a)) for a in np.linspace(np.radians(90), np.radians(-170), 40)]
+    S = LineString(up + lo).buffer(lw, cap_style=1)
+    bar = LineString([(cx, cy-4.2*k), (cx, cy+4.2*k)]).buffer(lw, cap_style=2)
+    return unary_union([S, bar])
 
 def chip_stack(x, b=BASE):
-    """カジノチップの山と、立てかけた1枚"""
-    g = []
-    for k in range(5):
-        y = b + k*2.2; dx = (0.5 if k % 2 else -0.4)
-        ch = box(x-5+dx, y-0.2 if k else b-0.5, x+5+dx, y+1.9)
-        for sx in (-3.0, 0, 3.0): ch = ch - box(x+dx+sx-0.6, y+0.4, x+dx+sx+0.6, y+1.3)
+    """カジノチップの山と、立てかけた$チップ（線もすき間も1mm以上）"""
+    g = []; H = 3.0
+    for k in range(4):
+        y = b + k*H; dx = (0.5 if k % 2 else -0.4)
+        ch = box(x-5.6+dx, (y if k else b-0.5), x+5.6+dx, y+H)
+        for sx in (-3.2, 0, 3.2): ch = ch - box(x+dx+sx-0.6, y+1.0, x+dx+sx+0.6, y+2.0)   # 縁の模様（白1.2×1.0）
         g.append(ch)
     stack = unary_union(g)
-    face = Point(x+1.0, b+16.4).buffer(5.2, 64)
-    face = face - Point(x+1.0, b+16.4).buffer(3.6, 64).difference(Point(x+1.0, b+16.4).buffer(2.9, 64)).buffer(0)
-    for k in range(8):
-        a = np.radians(k*45+22.5)
-        face = face - affinity.rotate(box(x+1.0+4.25-0.55, b+16.4-0.75, x+1.0+5.3, b+16.4+0.75), k*45+22.5, origin=(x+1.0, b+16.4))
-    face = face - fit(text_geom('$'), x-0.4, x+2.4, b+14.4, b+18.4, keep_aspect=True)
+    for k in range(1, 4):                       # 段の区切り：両端にV字の切れ込み
+        y = b + k*H
+        for sgn in (-1, 1):
+            ex = x + sgn*6.2
+            stack = stack - Polygon([(ex, y-0.6), (ex - sgn*1.6, y), (ex, y+0.6)])
+    cx, cy, R = x+0.6, b+4*H+6.6, 6.0
+    face = Point(cx, cy).buffer(R, 64)
+    for k in range(8):                          # 外周の切り欠き（幅1.6・深さ1.3）
+        face = face - affinity.rotate(box(cx+R-1.3, cy-0.8, cx+R+0.5, cy+0.8), k*45+22.5, origin=(cx, cy))
+    face = face - Point(cx, cy).buffer(3.75, 64)       # 中を抜いて…
+    face = face | _dollar(cx, cy, 6.4)                  # 太い＄を内側の輪につなげて描く
     return unary_union([stack, face])
 
 def dice(x, b=BASE):
@@ -498,6 +515,40 @@ def build(cfg):
     G = G - fit(text_geom(band), -40, 40, -44.0, -39.3, keep_aspect=True)
     return connect(G).buffer(0)
 
+# ================= 細さチェック =================
+MIN_W = 0.8     # 線・すき間の最小幅（0.4mmノズル2本分）。これより細い所があると印刷を止める
+WIN = box(-45, -45, 45, 45)   # 正面から見える範囲
+
+def _long_side(p):
+    r = p.minimum_rotated_rectangle; xy = np.array(r.exterior.coords)
+    return max(np.hypot(*(xy[1]-xy[0])), np.hypot(*(xy[2]-xy[1])))
+
+def thin_check(G, minw=MIN_W):
+    """細すぎる「線」と「すき間」を見つける（窓から見える所だけ）"""
+    r = minw/2
+    op = G.buffer(-r, join_style=1).buffer(r, join_style=1)
+    thin = G.difference(op.buffer(0.03)).intersection(WIN)
+    hole = box(-70, -70, 70, 70).difference(G)
+    gop = hole.buffer(-r, join_style=1).buffer(r, join_style=1)
+    gap = hole.difference(gop.buffer(0.03)).intersection(WIN.buffer(-0.5))
+    pick = lambda g: [p for p in getattr(g, 'geoms', [g]) if p.area > 0.25 and not p.is_empty
+                      and _long_side(p) > 2.5]
+    return pick(thin), pick(gap)
+
+def thin_report(name, G):
+    import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
+    thin, gap = thin_check(G)
+    if thin or gap:
+        fig, ax = plt.subplots(figsize=(7, 7))
+        for p in getattr(G, 'geoms', [G]):
+            ax.fill(*p.exterior.xy, color='#222')
+            for i in p.interiors: ax.fill(*i.xy, color='white')
+        for p in thin: ax.fill(*p.exterior.xy, color='red')
+        for p in gap: ax.fill(*p.exterior.xy, color='deepskyblue')
+        ax.set_aspect('equal'); ax.axis('off'); ax.set_title(f'{name}: 細い線(赤) {len(thin)} / 細いすき間(青) {len(gap)}')
+        plt.savefig(f'out/{name}_thin.png', dpi=110); plt.close()
+    return thin, gap
+
 if __name__ == '__main__':
     import trimesh
     cfg = json.load(open(sys.argv[1])); name = cfg['name']
@@ -506,6 +557,9 @@ if __name__ == '__main__':
     n = len(G.geoms) if G.geom_type == 'MultiPolygon' else 1
     print(name, 'components:', n, 'bounds:', [round(v, 1) for v in G.bounds])
     assert n == 1, '浮いた部分が残っています'
+    thin, gap = thin_report(name, G)
+    print(name, f'細い線 {len(thin)} か所 / 細いすき間 {len(gap)} か所（{MIN_W}mm未満）', [(round(p.centroid.x,1), round(p.centroid.y,1)) for p in thin+gap][:10])
+    if (thin or gap) and '--force' not in sys.argv: sys.exit(f'NG: 細い所があります → out/{name}_thin.png を確認')
     m = trimesh.creation.extrude_polygon(G, THICK)
     m.export(f'out/{name}_silhouette.stl')
     pickle.dump(G, open(f'out/{name}.pkl', 'wb'))
