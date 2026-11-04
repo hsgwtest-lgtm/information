@@ -1,8 +1,8 @@
 {
  "name": "cebu",
  "title": "CEBU",
- "dates": "00.00.00-00.00.00",
- "band_text": "PHILIPPINES",
+ "dates": "26.07.28-26.08.01",
+ "band_text": "PHILIPPINES  26.07.28-26.08.01",
  "horizon": "wave",
  "local": {
   "text": "Sugbo",
@@ -27,5 +27,6 @@
    "type": "chip_stack",
    "x": 38.3
   }
- ]
+ ],
+ "band_w": 44.0
 }
